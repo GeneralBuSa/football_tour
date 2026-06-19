@@ -1,0 +1,88 @@
+/* ==========================================
+   CSS DEĞİŞKENLERİ — Renk, font, spacing token'ları
+   ========================================== */
+
+@import url('https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&family=Inter:wght@400;500;600&family=Geist:wght@400;700&display=swap');
+
+:root {
+  --gold: #f5d061;
+  --white: #ffffff;
+
+  /* Tactical Pitch - Brand Colors */
+  --primary-cyan: #00f2ff;
+  --primary-cyan-dim: #00dbe7;
+  --primary-cyan-glow: rgba(0, 242, 255, 0.4);
+  --secondary-red: #ff4655;
+  --secondary-red-dim: #b60129;
+  
+  /* Background & Surfaces */
+  --bg-base: #0a0a0a;
+  --bg-surface: #131313;
+  --bg-surface-elevated: #1c1b1b;
+  --bg-surface-glass: rgba(19, 19, 19, 0.7);
+  
+  /* Text */
+  --text-primary: #e5e2e1;
+  --text-secondary: #849495;
+  --text-inverse: #0a0a0a;
+
+  /* Typography */
+  --font-display: 'Space Grotesk', sans-serif;
+  --font-body: 'Inter', sans-serif;
+  --font-mono: 'Geist', monospace;
+
+  /* Legacy Karanlık tema değişkenleri (Korunması gerekenler) */
+  --bg-top: var(--bg-base);
+  --bg-mid: var(--bg-surface);
+  --bg-bot: var(--bg-base);
+  --glow-radial: rgba(0, 242, 255, 0.08);
+  --board-bg: #ecebeb;
+  --board-border: #d4d0cd;
+  --field-green: #8acb59;
+  --field-green-dark: #6eb23d;
+  --btn-blue: var(--primary-cyan-dim);
+  --btn-blue-hover: var(--primary-cyan);
+
+  /* Panel ve kart karanlık tema renkleri */
+  --panel-bg: var(--bg-surface-glass);
+  --panel-border: rgba(255, 255, 255, 0.05);
+  --card-bg: var(--bg-surface-elevated);
+  --badge-bg: rgba(0, 242, 255, 0.1);
+  --tab-bg: var(--bg-surface);
+  --tab-active-bg: var(--bg-surface-elevated);
+  --card-prop-bg: var(--bg-surface-elevated);
+  --card-prop-border: rgba(255, 255, 255, 0.05);
+  --panel-body-text: var(--text-primary);
+
+  /* Scrollbar karanlık tema */
+  --scrollbar-track: var(--bg-base);
+  --scrollbar-thumb: var(--bg-surface-elevated);
+}
+
+/* Aydınlık tema değişkenleri (Sadeleştirilmiş) */
+body.light-theme {
+  --bg-base: #ffffff;
+  --bg-surface: #f4f4f5;
+  --bg-surface-elevated: #e4e4e7;
+  --bg-surface-glass: rgba(255, 255, 255, 0.8);
+  
+  --text-primary: #18181b;
+  --text-secondary: #71717a;
+  
+  --bg-top: var(--bg-base);
+  --bg-mid: var(--bg-surface);
+  --bg-bot: var(--bg-base);
+  
+  --panel-bg: var(--bg-surface-glass);
+  --panel-border: rgba(0, 0, 0, 0.05);
+  --card-bg: var(--bg-surface-elevated);
+  --badge-bg: rgba(0, 242, 255, 0.1);
+  --tab-bg: var(--bg-surface);
+  --tab-active-bg: var(--white);
+  --card-prop-bg: var(--bg-base);
+  --card-prop-border: rgba(0, 0, 0, 0.05);
+  --panel-body-text: var(--text-primary);
+
+  --scrollbar-track: var(--bg-surface);
+  --scrollbar-thumb: var(--bg-surface-elevated);
+}

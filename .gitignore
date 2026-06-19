@@ -1,0 +1,53 @@
+# Bağımlılıklar
+node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# Build çıktıları
+dist/
+build/
+.output/
+
+# Ortam değişkenleri
+.env
+.env.local
+.env.*.local
+
+# IDE / Editör
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# İşletim sistemi dosyaları
+.DS_Store
+Thumbs.db
+Desktop.ini
+
+# Vite
+*.local
+
+# Tauri
+frontend/src-tauri/target/
+frontend/src-tauri/WixTools/
+frontend/src-tauri/Frameworks/
+
+# Veritabanı (yerel SQLite)
+*.db
+*.sqlite
+*.sqlite3
+
+# Log dosyaları
+logs/
+*.log
+
+# Geçici dosyalar
+tmp/
+temp/
+*.tmp
+
+# Paket kilitleri (tercihe göre — kaldırılabilir)
+# package-lock.json
+# yarn.lock
