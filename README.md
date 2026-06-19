@@ -29,26 +29,26 @@
 
 ```
 football_tour/
-├── frontend/                  # İstemci tarafı (Vite + Vanilla JS)
-│   ├── assets/                # Görseller, videolar, ses dosyaları
+├── frontend/                  # İstemci tarafı (Next.js 14 App Router)
+│   ├── public/                # Statik varlıklar (assets, görseller, logolar)
 │   ├── css/
+│   │   ├── base/              # Temel CSS sıfırlama ve değişkenleri
+│   │   ├── components/        # Bileşen bazlı stiller
 │   │   └── style.css          # Ana stil dosyası
 │   ├── js/
-│   │   └── game.js            # Oyun motoru ve ana oyun mantığı
-│   ├── pages/
-│   │   ├── achievements.html  # Başarımlar sayfası
-│   │   ├── auth.html          # Giriş / Kayıt / Şifre sıfırlama
-│   │   ├── battlepass.html    # Savaş bileti (sezon ödülleri)
-│   │   ├── history.html       # Maç geçmişi
-│   │   ├── profile.html       # Oyuncu profilleri
-│   │   └── store.html         # Mağaza
+│   │   ├── 3d/                # Three.js 3D oyun alanı modülleri
+│   │   ├── data/              # Oyun verileri (şehirler, tahta düzeni)
+│   │   ├── engine/            # Oyun motoru ve mantığı (zar, oyuncu, ekonomi)
+│   │   ├── ui/                # Arayüz kontrolleri (menü, modal, ayarlar)
+│   │   └── game.js            # Global modül ve oyun başlatıcı
 │   ├── services/
-│   │   └── GameService.js     # Oyun servisi (başarım, kayıt yönetimi)
-│   ├── src/                   # Ek kaynak dosyaları
-│   ├── src-tauri/             # Tauri masaüstü uygulama konfigürasyonu
-│   ├── index.html             # Ana sayfa ve oyun menüsü
+│   │   ├── ApiService.js      # REST API HTTP istemcisi (Supabase entegrasyonu)
+│   │   └── GameService.js     # Tauri/Web uyumlu ortak oyun servisleri
+│   ├── src/
+│   │   └── app/               # Next.js App Router sayfaları (achievements, auth, battlepass, history, store, layout.jsx, page.jsx)
+│   ├── src-tauri/             # Tauri masaüstü uygulaması konfigürasyonları
 │   ├── package.json           # Frontend bağımlılıkları
-│   └── vite.config.js         # Vite yapılandırması (varsa)
+│   └── next.config.mjs        # Next.js yapılandırması
 │
 ├── backend/                   # Sunucu tarafı (Express + Socket.io)
 │   ├── index.js               # Ana sunucu dosyası
@@ -87,7 +87,7 @@ npm install
 npm run dev
 ```
 
-Tarayıcıda `http://localhost:5173` adresine gidin.
+Tarayıcıda `http://localhost:3000` adresine gidin.
 
 ### 3. Backend Kurulumu
 
@@ -97,8 +97,7 @@ npm install
 node index.js
 ```
 
-Sunucu varsayılan olarak `http://localhost:3000` portunda çalışır.
-
+Sunucu varsayılan olarak `http://localhost:8000` portunda çalışır.
 ### 4. Veritabanı (Opsiyonel)
 
 PostgreSQL veritabanı şemasını oluşturmak için:
@@ -134,10 +133,10 @@ psql -U postgres -d football_tour -f database/schema.sql
 ### Frontend
 | Teknoloji | Açıklama |
 |-----------|----------|
-| **Vite** | Hızlı geliştirme sunucusu ve build aracı |
-| **Vanilla JS** | Framework'süz saf JavaScript |
+| **Next.js 14** | React tabanlı web framework'ü (App Router) |
+| **Vanilla JS** | Proje motorunda kullanılan saf JavaScript |
 | **Three.js** | 3D görsel efektler (opsiyonel) |
-| **CSS3** | Özel animasyonlar ve glassmorphism |
+| **CSS3 (Vanilla)** | Özel neon animasyonlar ve glassmorphism |
 | **Tauri** | Masaüstü uygulama desteği |
 
 ### Backend
@@ -160,13 +159,13 @@ psql -U postgres -d football_tour -f database/schema.sql
 
 | Sayfa | Yol | Açıklama |
 |-------|-----|----------|
-| Ana Menü | `/index.html` | Oyun menüsü, mod seçimi, ayarlar |
-| Giriş/Kayıt | `/pages/auth.html` | Kimlik doğrulama (şifre güçlüğü göstergesi) |
-| Profil | `/pages/profile.html` | Oyuncu profilleri ve istatistikler |
-| Savaş Bileti | `/pages/battlepass.html` | Sezon ödülleri (5 seviye) |
-| Başarımlar | `/pages/achievements.html` | 8 başarım ve kilit durumları |
-| Maç Geçmişi | `/pages/history.html` | Geçmiş maç kayıtları |
-| Mağaza | `/pages/store.html` | Oyun içi satın alım |
+| Ana Menü | `/` | Oyun menüsü, mod seçimi, ayarlar |
+| Giriş/Kayıt | `/auth` | Kimlik doğrulama (şifre güçlüğü göstergesi) |
+| Profil | `/profile` | Oyuncu profilleri ve istatistikler |
+| Savaş Bileti | `/battlepass` | Sezon ödülleri (5 seviye) |
+| Başarımlar | `/achievements` | 8 başarım ve kilit durumları |
+| Maç Geçmişi | `/history` | Geçmiş maç kayıtları |
+| Mağaza | `/store` | Oyun içi satın alım |
 
 ---
 

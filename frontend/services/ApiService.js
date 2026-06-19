@@ -3,7 +3,7 @@
 // Tüm backend REST API çağrılarını merkezi olarak yönetir
 // ==========================================
 
-const API_BASE = 'http://localhost:3000/api';
+const API_BASE = 'http://localhost:8000/api';
 
 class ApiService {
   constructor() {

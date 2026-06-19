@@ -1,5 +1,4 @@
 {
-  "/page": "app/page.js",
   "/store/page": "app/store/page.js",
-  "/achievements/page": "app/achievements/page.js"
+  "/page": "app/page.js"
 }
