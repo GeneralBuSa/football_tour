@@ -2966,3 +2966,32 @@
     text-shadow: 0 0 12px rgba(0, 242, 255, 0.7);
   }
 }
+
+/* Giriş yap butonu oval tasarımı */
+.btn-login-oval {
+  font-family: var(--font-display, 'Outfit', sans-serif);
+  font-size: 13px;
+  font-weight: 700;
+  letter-spacing: 1px;
+  background: var(--primary-cyan, #00f2ff);
+  color: #000000;
+  border: none;
+  padding: 8px 20px;
+  border-radius: 24px;
+  cursor: pointer;
+  transition: all 0.2s ease-in-out;
+  box-shadow: 0 0 12px rgba(0, 242, 255, 0.3);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.btn-login-oval:hover {
+  background: var(--primary-cyan-dim, #00dbe7);
+  transform: translateY(-1px) scale(1.03);
+  box-shadow: 0 0 20px rgba(0, 242, 255, 0.5);
+}
+
+.btn-login-oval:active {
+  transform: translateY(0) scale(0.98);
+}

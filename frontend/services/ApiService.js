@@ -271,6 +271,18 @@ class ApiService {
     if (!user) return { error: 'Giriş yapılmadı' };
     return await this._get(`/saves/${user.id}`);
   }
+
+  // ==========================================
+  // ŞİFRE SIFIRLAMA API
+  // ==========================================
+
+  async forgotPassword(username, email) {
+    return await this._post('/auth/forgot-password', { username, email });
+  }
+
+  async resetPassword(resetToken, newPassword) {
+    return await this._post('/auth/reset-password', { resetToken, newPassword });
+  }
 }
 
 // Singleton olarak dışarıya ver

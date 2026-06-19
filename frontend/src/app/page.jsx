@@ -115,7 +115,7 @@ export default function App() {
             </div>
           </div>
         ) : (
-          <button className="btn-play-tactical" onClick={() => {window.location.href='/auth'}} style={{ padding: '8px 16px', fontSize: '13px' }}>
+          <button className="btn-login-oval" onClick={() => {window.location.href='/auth'}}>
             GİRİŞ YAP
           </button>
         )}
