@@ -51,3 +51,7 @@ temp/
 # Paket kilitleri (tercihe göre — kaldırılabilir)
 # package-lock.json
 # yarn.lock
+
+# Next.js Build & Cache
+.next/
+frontend/.next/
