@@ -17,7 +17,8 @@ import { openCityModal, closeModal, showAchievementsModal } from './ui/modal.js'
 import {
   playLocalGame, showOnlineLobby, showGameModeSelection, hideGameModeSelection,
   toggleSocialPanel, switchSocialTab, toggleOfflineAccordion,
-  showHome, showProfile, showBattlePass, showStore, showAchievements, showMatchHistory
+  showHome, showProfile, showBattlePass, showStore, showAchievements, showMatchHistory,
+  showPrivateRoomSelection, createPrivateRoomAction, joinPrivateRoomAction
 } from './ui/menu.js';
 import {
   openSettings, saveGame, loadGame, toggleTheme, initTheme,
@@ -47,6 +48,9 @@ window.toggleFullscreen = toggleFullscreen;
 window.closeApp = closeApp;
 window.playLocalGame = playLocalGame;
 window.showOnlineLobby = showOnlineLobby;
+window.showPrivateRoomSelection = showPrivateRoomSelection;
+window.createPrivateRoomAction = createPrivateRoomAction;
+window.joinPrivateRoomAction = joinPrivateRoomAction;
 window.toggleSocialPanel = toggleSocialPanel;
 window.switchSocialTab = switchSocialTab;
 window.showHome = showHome;

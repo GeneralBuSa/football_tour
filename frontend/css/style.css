@@ -2255,9 +2255,10 @@
   left: 0;
   right: 0;
   margin: 0 auto;
-  top: 110px;
-  bottom: 80px;
-  width: 600px;
+  top: 80px;
+  bottom: 30px;
+  width: 1150px;
+  max-width: 96%;
   z-index: 3;
   background: rgba(11, 15, 25, 0.65);
   backdrop-filter: blur(12px);
@@ -2994,4 +2995,75 @@
 
 .btn-login-oval:active {
   transform: translateY(0) scale(0.98);
+}
+
+/* Premium Sürgü (Range Input) Tasarımı */
+input[type="range"] {
+  -webkit-appearance: none;
+  width: 100%;
+  height: 6px;
+  background: rgba(255, 255, 255, 0.08);
+  border-radius: 3px;
+  outline: none;
+  border: 1px solid rgba(255, 255, 255, 0.03);
+  transition: background 0.3s ease;
+}
+
+input[type="range"]:hover {
+  background: rgba(255, 255, 255, 0.12);
+}
+
+/* Chrome, Safari, Opera, Edge için Thumb (Düğme) */
+input[type="range"]::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 14px;
+  height: 14px;
+  border-radius: 4px;
+  background: #00e5ff;
+  cursor: pointer;
+  border: 2px solid #0d1117;
+  box-shadow: 0 0 10px rgba(0, 229, 255, 0.5);
+  transition: transform 0.1s ease, background-color 0.2s, box-shadow 0.2s;
+}
+
+input[type="range"]::-webkit-slider-thumb:hover {
+  transform: scale(1.2);
+  background: #29b6f6;
+  box-shadow: 0 0 15px rgba(41, 182, 246, 0.8);
+}
+
+input[type="range"]::-webkit-slider-thumb:active {
+  transform: scale(1.1);
+  background: #00838f;
+}
+
+/* Firefox için Thumb (Düğme) */
+input[type="range"]::-moz-range-thumb {
+  width: 14px;
+  height: 14px;
+  border-radius: 4px;
+  background: #00e5ff;
+  cursor: pointer;
+  border: 2px solid #0d1117;
+  box-shadow: 0 0 10px rgba(0, 229, 255, 0.5);
+  transition: transform 0.1s ease, background-color 0.2s, box-shadow 0.2s;
+}
+
+input[type="range"]::-moz-range-thumb:hover {
+  transform: scale(1.2);
+  background: #29b6f6;
+  box-shadow: 0 0 15px rgba(41, 182, 246, 0.8);
+}
+
+input[type="range"]::-moz-range-thumb:active {
+  transform: scale(1.1);
+  background: #00838f;
+}
+
+/* Sürgü dolgu efekti (Firefox) */
+input[type="range"]::-moz-range-progress {
+  background: #00e5ff;
+  height: 100%;
+  border-radius: 3px;
 }

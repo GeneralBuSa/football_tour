@@ -1,6 +1,8 @@
 'use client';
 import { useState, useEffect } from 'react';
 import apiService from '../../../services/ApiService.js';
+import tr from '../../locales/tr.json';
+import en from '../../locales/en.json';
 import '../../../css/components/auth.css';
 
 export default function AuthPage() {
@@ -14,12 +16,13 @@ export default function AuthPage() {
   const [resetToken, setResetToken] = useState('');
   const [newPassword, setNewPassword] = useState('');
   const [successMessage, setSuccessMessage] = useState('');
-  const [passwordStrength, setPasswordStrength] = useState({ score: 0, text: '', color: '', width: '0%' });
+  const [passwordStrengthScore, setPasswordStrengthScore] = useState(0);
+  const [language, setLanguage] = useState('Türkçe');
 
   const checkPasswordStrength = (pwd) => {
     setPassword(pwd);
     if (!pwd) {
-      setPasswordStrength({ score: 0, text: '', color: '', width: '0%' });
+      setPasswordStrengthScore(0);
       return;
     }
 
@@ -30,41 +33,26 @@ export default function AuthPage() {
     if (/[0-9]/.test(pwd)) score++;
     if (/[^A-Za-z0-9]/.test(pwd)) score++;
 
-    let text = 'Çok Zayıf';
-    let color = '#ff5252';
-    let width = '25%';
-
-    if (score === 2) {
-      text = 'Zayıf';
-      color = '#ff7043';
-      width = '40%';
-    } else if (score === 3) {
-      text = 'Orta';
-      color = '#f5d061';
-      width = '60%';
-    } else if (score === 4) {
-      text = 'Güçlü';
-      color = '#29b6f6';
-      width = '80%';
-    } else if (score >= 5) {
-      text = 'Çok Güçlü';
-      color = '#2ecc71';
-      width = '100%';
-    }
-
-    setPasswordStrength({ score, text, color, width });
+    setPasswordStrengthScore(score === 0 ? 1 : score);
   };
+
+  const [mounted, setMounted] = useState(false);
 
   useEffect(() => {
     if (apiService.isLoggedIn()) {
       window.location.href = '/';
     }
+    const savedLang = localStorage.getItem('ft26_language') || 'Türkçe';
+    setLanguage(savedLang);
+    setMounted(true);
   }, []);
+
+  const t = language === 'English' ? en : tr;
 
   const handleLogin = async (e) => {
     e.preventDefault();
     if (!username || !password) {
-      setError('Lütfen tüm alanları doldurun.');
+      setError(t.auth_fill_all);
       return;
     }
 
@@ -75,10 +63,10 @@ export default function AuthPage() {
       if (res && res.token) {
         window.location.href = '/';
       } else {
-        setError(res?.error || 'Giriş yapılamadı. Bilgilerinizi kontrol edin.');
+        setError(res?.error || (language === 'English' ? 'Failed to log in. Please check your credentials.' : 'Giriş yapılamadı. Bilgilerinizi kontrol edin.'));
       }
     } catch (err) {
-      setError('Bir sunucu hatası oluştu.');
+      setError(language === 'English' ? 'A server error occurred.' : 'Bir sunucu hatası oluştu.');
     } finally {
       setLoading(false);
     }
@@ -87,7 +75,7 @@ export default function AuthPage() {
   const handleRegister = async (e) => {
     e.preventDefault();
     if (!username || !email || !password) {
-      setError('Lütfen tüm alanları doldurun.');
+      setError(t.auth_fill_all);
       return;
     }
 
@@ -98,10 +86,10 @@ export default function AuthPage() {
       if (res && res.token) {
         window.location.href = '/';
       } else {
-        setError(res?.error || 'Kayıt işlemi başarısız.');
+        setError(res?.error || (language === 'English' ? 'Registration failed.' : 'Kayıt işlemi başarısız.'));
       }
     } catch (err) {
-      setError('Bir sunucu hatası oluştu.');
+      setError(language === 'English' ? 'A server error occurred.' : 'Bir sunucu hatası oluştu.');
     } finally {
       setLoading(false);
     }
@@ -110,7 +98,7 @@ export default function AuthPage() {
   const handleForgotPassword = async (e) => {
     e.preventDefault();
     if (!username || !email) {
-      setError('Lütfen kullanıcı adı ve e-postanızı girin.');
+      setError(t.auth_forgot_fill);
       return;
     }
 
@@ -122,10 +110,10 @@ export default function AuthPage() {
         setResetToken(res.resetToken);
         setResetStep(2);
       } else {
-        setError(res?.error || 'Doğrulama başarısız.');
+        setError(res?.error || (language === 'English' ? 'Verification failed.' : 'Doğrulama başarısız.'));
       }
     } catch (err) {
-      setError('Bir sunucu hatası oluştu.');
+      setError(language === 'English' ? 'A server error occurred.' : 'Bir sunucu hatası oluştu.');
     } finally {
       setLoading(false);
     }
@@ -134,7 +122,7 @@ export default function AuthPage() {
   const handleResetPassword = async (e) => {
     e.preventDefault();
     if (!newPassword) {
-      setError('Lütfen yeni şifrenizi girin.');
+      setError(t.auth_reset_fill);
       return;
     }
 
@@ -143,7 +131,7 @@ export default function AuthPage() {
       setError('');
       const res = await apiService.resetPassword(resetToken, newPassword);
       if (res && res.success) {
-        setSuccessMessage('Şifreniz başarıyla güncellendi! Giriş yapabilirsiniz.');
+        setSuccessMessage(t.auth_reset_success);
         setTimeout(() => {
           setActiveTab('login');
           setUsername('');
@@ -155,23 +143,23 @@ export default function AuthPage() {
           setSuccessMessage('');
         }, 2000);
       } else {
-        setError(res?.error || 'Şifre güncellenemedi.');
+        setError(res?.error || (language === 'English' ? 'Failed to update password.' : 'Şifre güncellenemedi.'));
       }
     } catch (err) {
-      setError('Bir sunucu hatası oluştu.');
+      setError(language === 'English' ? 'A server error occurred.' : 'Bir sunucu hatası oluştu.');
     } finally {
       setLoading(false);
     }
   };
 
   return (
-    <div className="auth-page">
+    <div className="auth-page" style={{ opacity: mounted ? 1 : 0, transition: 'opacity 0.15s ease-in-out' }}>
       {/* Arka Plan Efekti */}
       <div className="auth-overlay"></div>
 
       <div className="auth-container">
         <div className="auth-logo">
-          <span className="logo-main">FT26</span>
+          <img src="/assets/logo.png" alt="FT26 Logo" style={{ maxHeight: '80px', margin: '0 auto', display: 'block' }} />
         </div>
 
         <div className="auth-tabs">
@@ -183,15 +171,15 @@ export default function AuthPage() {
             <>
               <div 
                 className={`auth-tab ${activeTab === 'login' ? 'active' : ''}`}
-                onClick={() => { setActiveTab('login'); setError(''); setSuccessMessage(''); setPassword(''); setPasswordStrength({ score: 0, text: '', color: '', width: '0%' }); }}
+                onClick={() => { setActiveTab('login'); setError(''); setSuccessMessage(''); setPassword(''); setPasswordStrengthScore(0); }}
               >
-                GİRİŞ YAP
+                {t.auth_login}
               </div>
               <div 
                 className={`auth-tab ${activeTab === 'register' ? 'active' : ''}`}
-                onClick={() => { setActiveTab('register'); setError(''); setSuccessMessage(''); setPassword(''); setPasswordStrength({ score: 0, text: '', color: '', width: '0%' }); }}
+                onClick={() => { setActiveTab('register'); setError(''); setSuccessMessage(''); setPassword(''); setPasswordStrengthScore(0); }}
               >
-                KAYIT OL
+                {t.auth_register}
               </div>
             </>
           )}
@@ -235,7 +223,7 @@ export default function AuthPage() {
             <input 
               type="text" 
               className="auth-input" 
-              placeholder="Kullanıcı Adı"
+              placeholder={t.auth_username}
               value={username}
               onChange={(e) => setUsername(e.target.value)}
               disabled={loading}
@@ -245,17 +233,17 @@ export default function AuthPage() {
             <input 
               type="password" 
               className="auth-input" 
-              placeholder="Şifre"
+              placeholder={t.auth_password}
               value={password}
               onChange={(e) => setPassword(e.target.value)}
               disabled={loading}
             />
           </div>
           <div className="forgot-password-link" style={{ width: '100%', textAlign: 'right', marginBottom: '10px' }} onClick={() => { setActiveTab('reset'); setResetStep(1); setError(''); setSuccessMessage(''); }}>
-            Şifremi Unuttum
+            {t.auth_forgot_link}
           </div>
           <button type="submit" className="auth-btn" disabled={loading}>
-            {loading ? 'GİRİŞ YAPILIYOR...' : 'GİRİŞ YAP'}
+            {loading ? t.auth_logging_in : t.auth_login}
           </button>
         </form>
 
@@ -265,7 +253,7 @@ export default function AuthPage() {
             <input 
               type="text" 
               className="auth-input" 
-              placeholder="Kullanıcı Adı"
+              placeholder={t.auth_username}
               value={username}
               onChange={(e) => setUsername(e.target.value)}
               disabled={loading}
@@ -275,7 +263,7 @@ export default function AuthPage() {
             <input 
               type="email" 
               className="auth-input" 
-              placeholder="E-posta Adresi"
+              placeholder={t.auth_email}
               value={email}
               onChange={(e) => setEmail(e.target.value)}
               disabled={loading}
@@ -285,24 +273,56 @@ export default function AuthPage() {
             <input 
               type="password" 
               className="auth-input" 
-              placeholder="Şifre"
+              placeholder={t.auth_password}
               value={password}
               onChange={(e) => checkPasswordStrength(e.target.value)}
               disabled={loading}
             />
-            {password && (
-              <>
-                <div className="password-strength">
-                  <div className="strength-bar" style={{ width: passwordStrength.width, backgroundColor: passwordStrength.color }}></div>
-                </div>
-                <div className="strength-text" style={{ color: passwordStrength.color }}>
-                  Şifre Gücü: {passwordStrength.text}
-                </div>
-              </>
-            )}
+            {password && (() => {
+              let strengthText = '';
+              let strengthColor = '';
+              let strengthWidth = '0%';
+
+              if (passwordStrengthScore === 1) {
+                strengthText = t.auth_pwd_very_weak;
+                strengthColor = '#ff5252';
+                strengthWidth = '25%';
+              } else if (passwordStrengthScore === 2) {
+                strengthText = t.auth_pwd_weak;
+                strengthColor = '#ff7043';
+                strengthWidth = '40%';
+              } else if (passwordStrengthScore === 3) {
+                strengthText = t.auth_pwd_medium;
+                strengthColor = '#f5d061';
+                strengthWidth = '60%';
+              } else if (passwordStrengthScore === 4) {
+                strengthText = t.auth_pwd_strong;
+                strengthColor = '#29b6f6';
+                strengthWidth = '80%';
+              } else if (passwordStrengthScore >= 5) {
+                strengthText = t.auth_pwd_very_strong;
+                strengthColor = '#2ecc71';
+                strengthWidth = '100%';
+              } else {
+                strengthText = t.auth_pwd_very_weak;
+                strengthColor = '#ff5252';
+                strengthWidth = '25%';
+              }
+
+              return (
+                <>
+                  <div className="password-strength">
+                    <div className="strength-bar" style={{ width: strengthWidth, backgroundColor: strengthColor }}></div>
+                  </div>
+                  <div className="strength-text" style={{ color: strengthColor }}>
+                    {t.auth_pwd_strength}{strengthText}
+                  </div>
+                </>
+              );
+            })()}
           </div>
           <button type="submit" className="auth-btn btn-register" disabled={loading}>
-            {loading ? 'KAYIT YAPILIYOR...' : 'KAYIT OL'}
+            {loading ? t.auth_registering : t.auth_register}
           </button>
         </form>
 
@@ -312,13 +332,13 @@ export default function AuthPage() {
             {resetStep === 1 ? (
               <form onSubmit={handleForgotPassword} style={{ width: '100%', display: 'flex', flexDirection: 'column', gap: '20px' }}>
                 <div style={{ color: 'rgba(255, 255, 255, 0.6)', fontSize: '13px', textAlign: 'center', marginBottom: '10px', lineHeight: '1.5' }}>
-                  Kullanıcı adınızı ve kayıtlı e-posta adresinizi girerek şifrenizi sıfırlayabilirsiniz.
+                  {t.auth_forgot_desc}
                 </div>
                 <div className="input-group">
                   <input 
                     type="text" 
                     className="auth-input" 
-                    placeholder="Kullanıcı Adı"
+                    placeholder={t.auth_username}
                     value={username}
                     onChange={(e) => setUsername(e.target.value)}
                     disabled={loading}
@@ -328,36 +348,36 @@ export default function AuthPage() {
                   <input 
                     type="email" 
                     className="auth-input" 
-                    placeholder="E-posta Adresi"
+                    placeholder={t.auth_email}
                     value={email}
                     onChange={(e) => setEmail(e.target.value)}
                     disabled={loading}
                   />
                 </div>
                 <button type="submit" className="auth-btn" disabled={loading}>
-                  {loading ? 'DOĞRULANIYOR...' : 'DEVAM ET'}
+                  {loading ? t.auth_verifying : (language === 'English' ? 'CONTINUE' : 'DEVAM ET')}
                 </button>
                 <div className="forgot-password-link" style={{ textAlign: 'center', marginTop: '10px', display: 'block', width: '100%' }} onClick={() => { setActiveTab('login'); setError(''); }}>
-                  Giriş Ekranına Dön
+                  {t.auth_back_to_login}
                 </div>
               </form>
             ) : (
               <form onSubmit={handleResetPassword} style={{ width: '100%', display: 'flex', flexDirection: 'column', gap: '20px' }}>
                 <div style={{ color: '#2ecc71', fontSize: '13px', textAlign: 'center', marginBottom: '10px', lineHeight: '1.5' }}>
-                  Doğrulama başarılı! Lütfen yeni şifrenizi belirleyin.
+                  {t.auth_forgot_success}
                 </div>
                 <div className="input-group">
                   <input 
                     type="password" 
                     className="auth-input" 
-                    placeholder="Yeni Şifre"
+                    placeholder={t.auth_new_password}
                     value={newPassword}
                     onChange={(e) => setNewPassword(e.target.value)}
                     disabled={loading}
                   />
                 </div>
                 <button type="submit" className="auth-btn" disabled={loading}>
-                  {loading ? 'ŞİFRE GÜNCELLENİYOR...' : 'ŞİFREYİ GÜNCELLE'}
+                  {loading ? t.auth_resetting : t.auth_confirm}
                 </button>
               </form>
             )}

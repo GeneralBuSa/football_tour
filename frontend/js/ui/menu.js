@@ -309,6 +309,184 @@ export async function loadFriendsUI() {
   } catch (e) {
     console.error("Sosyal panel yükleme hatası:", e);
   }
+};
+
+// Özel oyun kur / katıl seçim ekranı
+export function showPrivateRoomSelection() {
+  if (!apiService.isLoggedIn()) {
+    showNotif('Özel oyun kurmak veya katılmak için giriş yapmalısınız!');
+    window.location.href = '/auth';
+    return;
+  }
+
+  closeModal('private-room-modal');
+
+  const div = document.createElement('div');
+  div.className = 'modal-backdrop';
+  div.id = 'private-room-modal';
+  div.innerHTML = `
+    <div class="modal" style="width: 360px; background: rgba(20, 24, 33, 0.95); border: 1px solid rgba(41, 182, 246, 0.2); box-shadow: 0 10px 30px rgba(0, 0, 0, 0.5), 0 0 20px rgba(41, 182, 246, 0.1); border-radius: 12px; padding: 24px;">
+      <div class="modal-head" style="border-bottom: 1px solid rgba(255,255,255,0.1); padding-bottom: 12px; margin-bottom: 20px;">
+        <div class="modal-city" style="font-size: 20px; font-weight: bold; color: #29b6f6; letter-spacing: 1px;">🎮 ÖZEL OYUN YÖNETİMİ</div>
+        <div class="modal-league" style="font-size: 11px; color: #aaa; margin-top: 4px;">Arkadaşlarınla Oyna</div>
+      </div>
+      <div class="modal-body" style="display: flex; flex-direction: column; gap: 15px; margin-top: 15px;">
+        
+        <div style="background: rgba(255,255,255,0.03); border: 1px solid rgba(255,255,255,0.05); padding: 15px; border-radius: 8px; text-align: center;">
+          <div style="font-size: 14px; font-weight: bold; color: #fff; margin-bottom: 8px;">Oda Kur (Host)</div>
+          <p style="font-size: 11px; color: #aaa; margin-bottom: 12px;">Sizin oda kodunuz kendi kullanıcı adınız olacaktır.</p>
+          <button class="mbtn mbtn-buy" onclick="window.createPrivateRoomAction()" style="width: 100%; margin: 0; padding: 10px;">Oda Oluştur</button>
+        </div>
+
+        <div style="background: rgba(255,255,255,0.03); border: 1px solid rgba(255,255,255,0.05); padding: 15px; border-radius: 8px;">
+          <div style="font-size: 14px; font-weight: bold; color: #fff; margin-bottom: 8px; text-align: center;">Odaya Katıl (Guest)</div>
+          <input type="text" id="host-code-input" placeholder="Arkadaşının Kullanıcı Adı (Oda Kodu)" class="search-input-field" style="width: 100%; background: rgba(0,0,0,0.3); border: 1px solid rgba(255,255,255,0.1); color: #fff; padding: 10px; border-radius: 6px; font-size: 13px; text-align: center; margin-bottom: 10px;" />
+          <button class="mbtn mbtn-upgrade" onclick="window.joinPrivateRoomAction()" style="width: 100%; margin: 0; padding: 10px;">Odaya Bağlan</button>
+        </div>
+
+      </div>
+      <div class="modal-btns" style="margin-top: 20px; border-top: 1px solid rgba(255, 255, 255, 0.05); padding-top: 16px;">
+        <button class="mbtn mbtn-pass" onclick="window.closeModal('private-room-modal')" style="width: 100%; padding: 10px; margin: 0;">Geri Dön</button>
+      </div>
+    </div>
+  `;
+  document.body.appendChild(div);
+}
+
+// Özel oda oluşturma aksiyonu (Host)
+export async function createPrivateRoomAction() {
+  closeModal('private-room-modal');
+
+  const myUsername = apiService.getUser()?.username;
+
+  const div = document.createElement('div');
+  div.className = 'modal-backdrop';
+  div.id = 'lobby-modal';
+  div.innerHTML = `
+    <div class="modal" style="width: 340px;">
+      <div class="modal-head">
+        <div class="modal-city">🎮 ÖZEL ODA KURULDU</div>
+        <div class="modal-league">Arkadaşının Katılması Bekleniyor</div>
+      </div>
+      <div class="modal-body lobby-modal-body">
+        <div style="text-align: center; margin: 15px 0;">
+          <div style="font-size: 12px; color: #aaa;">Arkadaşınızın girmesi gereken Oda Kodu:</div>
+          <div style="font-size: 24px; font-weight: bold; color: #29b6f6; letter-spacing: 2px; margin: 10px 0; background: rgba(41, 182, 246, 0.1); padding: 10px; border-radius: 6px; border: 1px dashed #29b6f6;">
+            ${myUsername}
+          </div>
+        </div>
+        <div class="lobby-spinner"></div>
+        <div class="lobby-sim-status" id="lobby-status">Arkadaşınız bekleniyor...</div>
+      </div>
+      <div class="modal-btns">
+        <button class="mbtn mbtn-pass" id="btn-lobby-cancel" onclick="window.closeLobbyQueue()" style="width: 100%">İptal Et</button>
+      </div>
+    </div>
+  `;
+  document.body.appendChild(div);
+
+  try {
+    const res = await apiService.createPrivateLobby();
+    const statusEl = document.getElementById('lobby-status');
+    
+    if (res.error) {
+      statusEl.textContent = 'Hata: ' + res.error;
+      const spinner = document.querySelector('.lobby-spinner');
+      if (spinner) spinner.style.display = 'none';
+      return;
+    }
+
+    startPrivateLobbyCheck();
+
+  } catch (e) {
+    console.error("Özel oda hatası:", e);
+  }
+}
+
+// Özel odaya katılma aksiyonu (Guest)
+export async function joinPrivateRoomAction() {
+  const input = document.getElementById('host-code-input');
+  if (!input || !input.value.trim()) {
+    showNotif('Lütfen geçerli bir oda kodu (kullanıcı adı) girin!');
+    return;
+  }
+
+  const hostUsername = input.value.trim();
+  closeModal('private-room-modal');
+
+  const div = document.createElement('div');
+  div.className = 'modal-backdrop';
+  div.id = 'lobby-modal';
+  div.innerHTML = `
+    <div class="modal" style="width: 340px;">
+      <div class="modal-head">
+        <div class="modal-city">🔌 ODAYA BAĞLANILIYOR</div>
+        <div class="modal-league">${hostUsername} odasına bağlantı kuruluyor</div>
+      </div>
+      <div class="modal-body lobby-modal-body">
+        <div class="lobby-spinner"></div>
+        <div class="lobby-sim-status" id="lobby-status">Bağlantı isteği gönderiliyor...</div>
+      </div>
+      <div class="modal-btns">
+        <button class="mbtn mbtn-pass" id="btn-lobby-cancel" onclick="window.closeLobbyQueue()" style="width: 100%">İptal Et</button>
+      </div>
+    </div>
+  `;
+  document.body.appendChild(div);
+
+  try {
+    const res = await apiService.joinPrivateLobby(hostUsername);
+    const statusEl = document.getElementById('lobby-status');
+
+    if (res.error) {
+      statusEl.textContent = 'Bağlanılamadı: ' + res.error;
+      const spinner = document.querySelector('.lobby-spinner');
+      if (spinner) spinner.style.display = 'none';
+      return;
+    }
+
+    statusEl.textContent = 'Eşleşme tamamlandı, oyun hazırlanıyor...';
+    startPrivateLobbyCheck();
+
+  } catch (e) {
+    console.error("Oda bağlantı hatası:", e);
+  }
+}
+
+// Lobi kontrol döngüsünü başlat (Özel oda için ortak)
+function startPrivateLobbyCheck() {
+  const statusEl = document.getElementById('lobby-status');
+  const lobbyInterval = setInterval(async () => {
+    if (!document.getElementById('lobby-modal')) {
+      clearInterval(lobbyInterval);
+      return;
+    }
+
+    const statusRes = await apiService.getLobbyStatus();
+    if (statusRes.status === 'matched') {
+      clearInterval(lobbyInterval);
+      statusEl.textContent = `Eşleşme Sağlandı! ${statusRes.matched_with} ile oyun başlıyor...`;
+      statusEl.style.background = 'rgba(46, 204, 113, 0.1)';
+      statusEl.style.color = '#2ecc71';
+
+      const spinner = document.querySelector('.lobby-spinner');
+      if (spinner) spinner.style.display = 'none';
+
+      const modalBtns = document.querySelector('#lobby-modal .modal-btns');
+      if (modalBtns) {
+        modalBtns.innerHTML = `
+          <button class="mbtn mbtn-buy" onclick="window.closeModal('lobby-modal'); window.playLocalGame();" style="width: 100%">Oyunu Başlat</button>
+        `;
+      }
+    }
+  }, 2000);
+
+  window.closeLobbyQueue = async () => {
+    clearInterval(lobbyInterval);
+    await apiService.leaveLobby();
+    closeModal('lobby-modal');
+    showNotif('Özel oda iptal edildi.');
+  };
 }
 
 window.addFriendAction = async () => {

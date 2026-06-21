@@ -8,6 +8,7 @@ CREATE TABLE IF NOT EXISTS public.users (
     username TEXT UNIQUE NOT NULL,
     email TEXT UNIQUE NOT NULL,
     password_hash TEXT NOT NULL,
+    avatar TEXT,
     created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
 );
 

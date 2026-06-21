@@ -1,11 +1,15 @@
 'use client';
 import { useEffect, useState } from 'react';
 import apiService from '../../../services/ApiService.js';
+import tr from '../../locales/tr.json';
+import en from '../../locales/en.json';
 
 export default function BattlePassPage() {
   const [isLoggedIn, setIsLoggedIn] = useState(false);
+  const [user, setUser] = useState(null);
   const [stats, setStats] = useState({ total_earnings: 2000, wins: 0, xp: 0 });
   const [loading, setLoading] = useState(true);
+  const [language, setLanguage] = useState('Türkçe');
 
   // Battle Pass ödül tanımları (10 Seviye)
   const LEVELS = [
@@ -21,11 +25,24 @@ export default function BattlePassPage() {
     { level: 10, xpRequired: 32000, rewardName: 'FT26 Kurucu Kupası', rewardIcon: '🏆', rewardDesc: 'VIP Profil Çerçevesi' }
   ];
 
+  const [mounted, setMounted] = useState(false);
+
   useEffect(() => {
+    // 1. Client-side durumları hemen yükle (Dil ve giriş durumu)
+    const logged = apiService.isLoggedIn();
+    setIsLoggedIn(logged);
+
+    const savedLang = localStorage.getItem('ft26_language') || 'Türkçe';
+    setLanguage(savedLang);
+    
+    if (logged) {
+      const u = apiService.getUser();
+      setUser(u);
+    }
+    setMounted(true);
+
+    // 2. game.js dinamik modülünü ve ek verileri arka planda yükle
     import('../../../js/game.js').then(async () => {
-      const logged = apiService.isLoggedIn();
-      setIsLoggedIn(logged);
-      
       if (logged) {
         const u = apiService.getUser();
         apiService.getStats(u.id).then(res => {
@@ -61,8 +78,10 @@ export default function BattlePassPage() {
   const xpNeededForNext = nextLevelXp - prevLevelXp;
   const progressPercent = xpNeededForNext > 0 ? Math.min(100, (xpInCurrentLevel / xpNeededForNext) * 100) : 100;
 
+  const t = language === 'English' ? en : tr;
+
   return (
-    <>
+    <div style={{ opacity: mounted ? 1 : 0, transition: 'opacity 0.15s ease-in-out' }}>
       {/* Arka Plan Videosu */}
       <div className="main-menu-container" style={{position: 'fixed', top: '0', left: '0', width: '100%', height: '100%', zIndex: '-1'}}>
         <video autoPlay loop muted playsInline id="bg-video" className="menu-video-bg">
@@ -75,36 +94,35 @@ export default function BattlePassPage() {
       <div className="menu-top-nav" style={{position: 'fixed', top: '0', left: '0', width: '100%', zIndex: '10'}}>
         <div className="top-nav-left">
           <div className="menu-logo" onClick={() => {window.location.href='/'}} style={{cursor: 'pointer'}}>
-            <span className="logo-main">FT26</span>
+            <img src="/assets/logo.png" alt="FT26 Logo" className="logo-img" />
           </div>
         </div>
         <div className="top-nav-center">
           <div className="nav-icons-group left">
-            <div className="nav-item-icon" title="Ana Sayfa" onClick={() => {window.location.href='/'}}>🏠</div>
-            <div className="nav-item-icon" title="Savaş Geçmişi" onClick={() => {window.location.href='/history'}}>📜</div>
+            <div className="nav-item-icon" title={t.nav_home} onClick={() => {window.location.href='/'}}>🏠</div>
+            <div className="nav-item-icon" title={t.nav_history} onClick={() => {window.location.href='/history'}}>📜</div>
+            <div className="nav-item-icon" title={t.nav_profile} onClick={() => {window.location.href='/profile'}}>👤</div>
           </div>
-          <button className="btn-play-tactical" onClick={() => {window.location.href='/?play=true'}}>OYNA</button>
+          <button className="btn-play-tactical" onClick={() => {window.location.href='/?play=true'}}>{t.play}</button>
           <div className="nav-icons-group right">
-            <div className="nav-item-icon" title="Başarımlar" onClick={() => {window.location.href='/achievements'}}>🏆</div>
-            <div className="nav-item-icon" title="Mağaza" onClick={() => {window.location.href='/store'}}>🛒</div>
+            <div className="nav-item-icon" title={t.nav_achievements} onClick={() => {window.location.href='/achievements'}}>🏆</div>
+            <div className="nav-item-icon" title={t.nav_store} onClick={() => {window.location.href='/store'}}>🛒</div>
+            <div className="nav-item-icon" title={t.nav_settings} onClick={() => {window.location.href='/settings'}}>⚙️</div>
           </div>
         </div>
         <div className="top-nav-right">
           <div className="user-stats">
-            <div className="stat-item" title="Oyuna Giriş Parası">
+            <div className="stat-item" title={t.earnings}>
               <span style={{display: "flex", alignItems: "center", justifyContent: "center", height: "100%"}}>🪙</span>
               <span style={{display: "flex", alignItems: "center", position: "relative", top: "0.5px"}}>
                 ₺{(stats.total_earnings || 0).toLocaleString()}
               </span>
             </div>
-            <div className="stat-item" title="Mevcut XP">
+            <div className="stat-item" title={t.current_xp || (language === 'English' ? 'Current XP' : 'Mevcut XP')}>
               <span style={{display: "flex", alignItems: "center", justifyContent: "center", height: "100%"}}>⚡</span>
               <span style={{display: "flex", alignItems: "center", position: "relative", top: "0.5px"}}>
-                {currentXp} XP (Seviye {currentLevel})
+                {t.xp_display.replace('{xp}', currentXp).replace('{level}', currentLevel)}
               </span>
-            </div>
-            <div className="stat-item-btn" title="Ayarlar" onClick={() => {window.openSettings()}}>
-              <span style={{display: "flex", alignItems: "center", justifyContent: "center"}}>⚙️</span>
             </div>
           </div>
         </div>
@@ -113,15 +131,15 @@ export default function BattlePassPage() {
       <div className="battlepass-page-container" style={{marginTop: '80px', padding: '20px'}}>
         <div className="menu-dynamic-screen">
           <div className="dynamic-screen-header" style={{position: 'relative', display: 'flex', justifyContent: 'center', alignItems: 'center'}}>
-            <button className="btn-mode-back" onClick={() => {window.location.href='/'}} style={{position: 'absolute', left: '0', margin: '0', padding: '6px 12px', fontSize: '12px'}}>← GERİ</button>
-            <span id="bp-header">🔥 SEZON BATTLE PASS</span>
+            <button className="btn-mode-back" onClick={() => {window.location.href='/'}} style={{position: 'absolute', left: '0', margin: '0', padding: '6px 12px', fontSize: '12px'}}>← {t.back}</button>
+            <span id="bp-header">{t.bp_header}</span>
           </div>
 
           <div className="dynamic-screen-body" style={{marginTop: '20px'}}>
             {loading ? (
-              <div style={{color: '#fff', textAlign: 'center', padding: '40px'}}>Yükleniyor...</div>
+              <div style={{color: '#fff', textAlign: 'center', padding: '40px'}}>{t.loading}</div>
             ) : !isLoggedIn ? (
-              <div style={{color: '#aaa', textAlign: 'center', padding: '40px'}}>Battle Pass ilerlemenizi görmek için lütfen giriş yapın.</div>
+              <div style={{color: '#aaa', textAlign: 'center', padding: '40px'}}>{t.bp_login_required}</div>
             ) : (
               <div style={{display: 'flex', flexDirection: 'column', gap: '24px'}}>
                 {/* Seviye İlerleme Kartı */}
@@ -135,13 +153,13 @@ export default function BattlePassPage() {
                 }}>
                   <div style={{display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px'}}>
                     <div>
-                      <span style={{fontSize: '24px', fontWeight: 'bold', color: '#29b6f6'}}>SEVİYE {currentLevel}</span>
-                      <span style={{fontSize: '14px', color: '#aaa', marginLeft: '12px'}}>{currentXp} Toplam XP</span>
+                      <span style={{fontSize: '24px', fontWeight: 'bold', color: '#29b6f6'}}>{t.level_display.replace('{level}', currentLevel).toUpperCase()}</span>
+                      <span style={{fontSize: '14px', color: '#aaa', marginLeft: '12px'}}>{t.bp_total_xp.replace('{xp}', currentXp)}</span>
                     </div>
                     {currentLevel < 10 ? (
-                      <span style={{fontSize: '13px', color: '#aaa'}}>Sonraki Seviye: {nextLevelXp} XP (Kalan: {nextLevelXp - currentXp} XP)</span>
+                      <span style={{fontSize: '13px', color: '#aaa'}}>{t.bp_next_level.replace('{xp}', nextLevelXp).replace('{remaining}', nextLevelXp - currentXp)}</span>
                     ) : (
-                      <span style={{fontSize: '13px', color: '#2ecc71', fontWeight: 'bold'}}>Maksimum Seviyeye Ulaşıldı! 🏆</span>
+                      <span style={{fontSize: '13px', color: '#2ecc71', fontWeight: 'bold'}}>{t.bp_max_level}</span>
                     )}
                   </div>
                   {/* Progress Bar */}
@@ -175,6 +193,9 @@ export default function BattlePassPage() {
                 }}>
                   {LEVELS.map(lvl => {
                     const isUnlocked = currentXp >= lvl.xpRequired;
+                    const rewardName = t[`bp_lvl_${lvl.level}_name`] || lvl.rewardName;
+                    const rewardDesc = t[`bp_lvl_${lvl.level}_desc`] || lvl.rewardDesc;
+
                     return (
                       <div key={lvl.level} className="bp-level-row" style={{
                         display: 'flex',
@@ -204,9 +225,9 @@ export default function BattlePassPage() {
                           </div>
                           <div>
                             <h4 style={{margin: '0 0 4px 0', fontSize: '15px', fontWeight: 'bold', color: isUnlocked ? '#2ecc71' : '#fff'}}>
-                              {lvl.rewardName}
+                              {rewardName}
                             </h4>
-                            <span style={{fontSize: '12px', color: '#aaa'}}>{lvl.rewardDesc}</span>
+                            <span style={{fontSize: '12px', color: '#aaa'}}>{rewardDesc}</span>
                           </div>
                         </div>
 
@@ -220,7 +241,7 @@ export default function BattlePassPage() {
                             padding: '4px 10px',
                             borderRadius: '12px'
                           }}>
-                            {isUnlocked ? 'KAZANILDI' : `${lvl.xpRequired} XP`}
+                            {isUnlocked ? t.bp_reward_unlocked : t.bp_level_xp.replace('{xp}', lvl.xpRequired)}
                           </div>
                         </div>
                       </div>
@@ -232,6 +253,6 @@ export default function BattlePassPage() {
           </div>
         </div>
       </div>
-    </>
+    </div>
   );
 }

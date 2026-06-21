@@ -7,13 +7,24 @@ const API_BASE = 'http://localhost:8000/api';
 
 class ApiService {
   constructor() {
-    if (typeof window !== 'undefined') {
+    this._token = null;
+    this._user = null;
+  }
+
+  // Dinamik Token Getter
+  get token() {
+    if (!this._token && typeof window !== 'undefined') {
       this._token = localStorage.getItem('ft26_auth_token') || null;
-      this._user = JSON.parse(localStorage.getItem('ft26_user') || 'null');
-    } else {
-      this._token = null;
-      this._user = null;
     }
+    return this._token;
+  }
+
+  // Dinamik User Getter
+  get user() {
+    if (!this._user && typeof window !== 'undefined') {
+      this._user = JSON.parse(localStorage.getItem('ft26_user') || 'null');
+    }
+    return this._user;
   }
 
   // ==========================================
@@ -23,31 +34,37 @@ class ApiService {
   // JWT token'ı kaydet
   setToken(token) {
     this._token = token;
-    localStorage.setItem('ft26_auth_token', token);
+    if (typeof window !== 'undefined') {
+      localStorage.setItem('ft26_auth_token', token);
+    }
   }
 
   // JWT token'ı sil
   clearToken() {
     this._token = null;
     this._user = null;
-    localStorage.removeItem('ft26_auth_token');
-    localStorage.removeItem('ft26_user');
+    if (typeof window !== 'undefined') {
+      localStorage.removeItem('ft26_auth_token');
+      localStorage.removeItem('ft26_user');
+    }
   }
 
   // Kullanıcı bilgisini kaydet
   setUser(user) {
     this._user = user;
-    localStorage.setItem('ft26_user', JSON.stringify(user));
+    if (typeof window !== 'undefined') {
+      localStorage.setItem('ft26_user', JSON.stringify(user));
+    }
   }
 
   // Mevcut kullanıcıyı döndür
   getUser() {
-    return this._user;
+    return this.user;
   }
 
   // Giriş yapılmış mı?
   isLoggedIn() {
-    return !!this._token;
+    return !!this.token;
   }
 
   // ==========================================
@@ -58,7 +75,8 @@ class ApiService {
   _headers(isJson = true) {
     const headers = {};
     if (isJson) headers['Content-Type'] = 'application/json';
-    if (this._token) headers['Authorization'] = `Bearer ${this._token}`;
+    const token = this.token;
+    if (token) headers['Authorization'] = `Bearer ${token}`;
     return headers;
   }
 
@@ -132,7 +150,24 @@ class ApiService {
 
   // Mevcut kullanıcı bilgisi
   async getMe() {
-    return await this._get('/auth/me');
+    const res = await this._get('/auth/me');
+    if (res && !res.error) {
+      this.setUser(res);
+    }
+    return res;
+  }
+
+  // Profil fotoğrafını güncelle
+  async updateAvatar(avatar) {
+    const res = await this._put('/auth/avatar', { avatar });
+    if (res && !res.error) {
+      const currentUser = this.getUser();
+      if (currentUser) {
+        currentUser.avatar = avatar;
+        this.setUser(currentUser);
+      }
+    }
+    return res;
   }
 
   // Çıkış yap
@@ -232,6 +267,18 @@ class ApiService {
     const user = this.getUser();
     if (!user) return { error: 'Giriş yapılmadı' };
     return await this._get(`/lobby/status/${user.id}`);
+  }
+
+  async createPrivateLobby() {
+    const user = this.getUser();
+    if (!user) return { error: 'Giriş yapılmadı' };
+    return await this._post('/lobby/create-private', { user_id: user.id });
+  }
+
+  async joinPrivateLobby(hostUsername) {
+    const user = this.getUser();
+    if (!user) return { error: 'Giriş yapılmadı' };
+    return await this._post('/lobby/join-private', { user_id: user.id, host_username: hostUsername });
   }
 
   // ==========================================

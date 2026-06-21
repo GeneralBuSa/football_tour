@@ -11,13 +11,13 @@ router.get('/:userId', async (req, res) => {
     // 1. Gönderilen istekler veya kabul edilen arkadaşlar
     const { data: sent, error: errorSent } = await supabase
       .from('friends')
-      .select('*, users:friend_id(id, username)')
+      .select('*, users:friend_id(id, username, avatar)')
       .eq('user_id', userId);
 
     // 2. Gelen istekler veya kabul edilen arkadaşlar
     const { data: received, error: errorRec } = await supabase
       .from('friends')
-      .select('*, users:user_id(id, username)')
+      .select('*, users:user_id(id, username, avatar)')
       .eq('friend_id', userId);
 
     if (errorSent || errorRec) {
@@ -32,6 +32,7 @@ router.get('/:userId', async (req, res) => {
           id: f.id,
           friend_id: f.users?.id,
           username: f.users?.username || 'Bilinmeyen Kullanıcı',
+          avatar: f.users?.avatar || '👤',
           status: f.status,
           is_sender: true
         });
@@ -44,6 +45,7 @@ router.get('/:userId', async (req, res) => {
           id: f.id,
           friend_id: f.users?.id,
           username: f.users?.username || 'Bilinmeyen Kullanıcı',
+          avatar: f.users?.avatar || '👤',
           status: f.status,
           is_sender: false
         });

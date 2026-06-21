@@ -57,9 +57,9 @@ router.post('/register', async (req, res) => {
     const token = jwt.sign({ id: data.id, username: data.username }, process.env.JWT_SECRET || 'secret');
     
     // Create initial stats for the user
-    await supabase.from('stats').insert([{ user_id: data.id }]);
+    await supabase.from('stats').insert([{ user_id: data.id, total_earnings: 2000 }]);
 
-    res.json({ token, user: { id: data.id, username: data.username, email: data.email } });
+    res.json({ token, user: { id: data.id, username: data.username, email: data.email, avatar: data.avatar } });
   } catch (e) {
     res.status(500).json({ error: 'Server error' });
   }
@@ -82,7 +82,7 @@ router.post('/login', async (req, res) => {
     if (!isMatch) return res.status(400).json({ error: 'Invalid credentials' });
 
     const token = jwt.sign({ id: data.id, username: data.username }, process.env.JWT_SECRET || 'secret');
-    res.json({ token, user: { id: data.id, username: data.username, email: data.email } });
+    res.json({ token, user: { id: data.id, username: data.username, email: data.email, avatar: data.avatar } });
   } catch (e) {
     res.status(500).json({ error: 'Server error' });
   }
@@ -93,13 +93,42 @@ router.get('/me', authenticate, async (req, res) => {
   try {
     const { data, error } = await supabase
       .from('users')
-      .select('id, username, email, created_at')
+      .select('id, username, email, avatar, created_at')
       .eq('id', req.user.id)
       .single();
 
     if (error) return res.status(404).json({ error: 'User not found' });
     res.json(data);
   } catch (e) {
+    res.status(500).json({ error: 'Server error' });
+  }
+});
+
+// Update Avatar
+router.put('/avatar', authenticate, async (req, res) => {
+  const { avatar } = req.body;
+  console.log("[Backend Auth] PUT /avatar request received! req.user:", req.user, "avatar from body:", avatar);
+  if (!avatar) {
+    console.warn("[Backend Auth] Avatar value is missing in request body!");
+    return res.status(400).json({ error: 'Avatar gereklidir' });
+  }
+
+  try {
+    const { data, error } = await supabase
+      .from('users')
+      .update({ avatar })
+      .eq('id', req.user.id)
+      .select('id, username, email, avatar')
+      .single();
+
+    if (error) {
+      console.error("[Backend Auth] Avatar update database error:", error.message);
+      return res.status(400).json({ error: error.message });
+    }
+    console.log("[Backend Auth] Avatar update success! New user data:", data);
+    res.json(data);
+  } catch (e) {
+    console.error("[Backend Auth] Avatar update crash:", e);
     res.status(500).json({ error: 'Server error' });
   }
 });

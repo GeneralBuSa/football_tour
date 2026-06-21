@@ -2,6 +2,8 @@
 import { useEffect, useState } from 'react';
 import apiService from '../../services/ApiService.js';
 import '../../css/style.css';
+import tr from '../locales/tr.json';
+import en from '../locales/en.json';
 
 export default function App() {
   const [isLoggedIn, setIsLoggedIn] = useState(false);
@@ -9,31 +11,46 @@ export default function App() {
   const [stats, setStats] = useState({ total_earnings: 2000, wins: 0 });
   const [friends, setFriends] = useState([]);
   const [loadingClass, setLoadingClass] = useState('loading-transition-overlay');
+  const [language, setLanguage] = useState('Türkçe');
 
   useEffect(() => {
-    // Sayfa açılışında yükleme ekranını 100ms sonra hızlıca kaldır
+    // 1. Client-side durumları hemen yükle (Dil ve giriş durumu)
+    const logged = apiService.isLoggedIn();
+    setIsLoggedIn(logged);
+
+    const savedLang = localStorage.getItem('ft26_language');
+    if (savedLang) setLanguage(savedLang);
+
+    if (logged) {
+      const u = apiService.getUser();
+      setUser(u);
+    }
+
     const fadeTimer = setTimeout(() => {
       setLoadingClass('loading-transition-overlay fade-out');
     }, 100);
 
-    // Global sayfa geçiş tetikleyicisi (hızlı geçiş için 100ms)
     window.triggerPageTransition = (callback) => {
       setLoadingClass('loading-transition-overlay');
       setTimeout(callback, 100);
     };
 
-    // Dinamik olarak game.js yüklenir ve window objesine fonksiyonlar bağlanır
-    import('../../js/game.js').then(() => {
-      const logged = apiService.isLoggedIn();
-      setIsLoggedIn(logged);
+    // 2. game.js dinamik modülünü ve ek verileri arka planda yükle
+    import('../../js/game.js').then(async () => {
       if (logged) {
         const u = apiService.getUser();
-        setUser(u);
+        try {
+          const meRes = await apiService.getMe();
+          if (meRes && !meRes.error) {
+            setUser(meRes);
+          }
+        } catch (e) {
+          console.error(e);
+        }
         apiService.getStats(u.id).then(res => {
           if (res && !res.error) setStats(res);
         }).catch(console.error);
 
-        // Arkadaşları çek
         apiService.getFriends().then(res => {
           if (Array.isArray(res)) setFriends(res);
         }).catch(console.error);
@@ -48,6 +65,8 @@ export default function App() {
     window.location.reload();
   };
 
+  const t = language === 'English' ? en : tr;
+
   return (
     <>
       <div className={loadingClass}>
@@ -56,7 +75,7 @@ export default function App() {
           <div className="loading-bar-container">
             <div className="loading-bar-progress"></div>
           </div>
-          <div className="loading-text">FT26 YÜKLENİYOR...</div>
+          <div className="loading-text">{t.loading}</div>
         </div>
       </div>
 
@@ -80,43 +99,26 @@ export default function App() {
         <div className="nav-icons-group left">
           <div className="nav-item-icon" title="Ana Sayfa" onClick={() => {window.showHome()}}>🏠</div>
           <div className="nav-item-icon" title="Savaş Geçmişi" onClick={() => {window.showMatchHistory()}}>📜</div>
+          <div className="nav-item-icon" title="Profil" onClick={() => {window.location.href='/profile'}}>👤</div>
         </div>
-        <button className="btn-play-tactical" onClick={() => {window.showGameModeSelection()}}>OYNA</button>
+        <button className="btn-play-tactical" onClick={() => {window.showGameModeSelection()}}>{t.play}</button>
         <div className="nav-icons-group right">
           <div className="nav-item-icon" title="Başarımlar" onClick={() => {window.showAchievements()}}>🏆</div>
           <div className="nav-item-icon" title="Mağaza" onClick={() => {window.showStore()}}>🛒</div>
+          <div className="nav-item-icon" title="Ayarlar" onClick={() => {window.location.href='/settings'}}>⚙️</div>
         </div>
       </div>
       <div className="top-nav-right">
         {isLoggedIn ? (
           <div className="user-stats" style={{ gap: '10px' }}>
-            <div className="stat-item" title="Kullanıcı Adı" style={{ fontSize: '12px', fontWeight: '600', color: '#29b6f6' }}>
-              👤 {user?.username}
-            </div>
-            <div className="stat-item" title="Oyuna Giriş Parası">
+            <div className="stat-item" title={t.earnings}>
               <span style={{display: "flex", alignItems: "center", justifyContent: "center", height: "100%"}}>🪙</span>
               <span style={{display: "flex", alignItems: "center", position: "relative", top: "0.5px"}}>₺{(stats.total_earnings || 0).toLocaleString()}</span>
-            </div>
-            <div className="stat-item" title="Kazanılan Maçlar">
-              <span style={{display: "flex", alignItems: "center", justifyContent: "center", height: "100%"}}>🏆</span>
-              <span style={{display: "flex", alignItems: "center", position: "relative", top: "0.5px"}}>{stats.wins || 0} Galibiyet</span>
-            </div>
-            <button className="btn-mode-back" onClick={handleLogout} style={{
-              margin: '0', 
-              padding: '6px 12px', 
-              fontSize: '11px', 
-              background: 'linear-gradient(to bottom, #ef5350, #d32f2f)', 
-              boxShadow: '0 2px 0 #b71c1c'
-            }}>
-              ÇIKIŞ
-            </button>
-            <div className="stat-item-btn" title="Ayarlar" onClick={() => {window.openSettings()}}>
-              <span style={{display: "flex", alignItems: "center", justifyContent: "center"}}>⚙️</span>
             </div>
           </div>
         ) : (
           <button className="btn-login-oval" onClick={() => {window.location.href='/auth'}}>
-            GİRİŞ YAP
+            {t.login_btn}
           </button>
         )}
       </div>
@@ -128,32 +130,32 @@ export default function App() {
         <div className="news-card big-card">
           <div className="news-img" style={{backgroundImage: "url('assets/messi.png')"}}></div>
           <div className="news-content-overlay">
-            <div className="news-tag">HAFTANIN MAÇI</div>
-            <h2 className="news-title">EFSANELER DÜELLOSU</h2>
-            <p className="news-desc">Messi vs Ronaldo | Dev derbi bu akşam 20:00'da.</p>
+            <div className="news-tag">{t.weekly_match}</div>
+            <h2 className="news-title">{t.legend_duel}</h2>
+            <p className="news-desc">{t.match_desc}</p>
           </div>
         </div>
         <div className="news-card small-card">
           <div className="news-img" style={{backgroundImage: "url('assets/haaland.png')"}}></div>
           <div className="news-content-overlay">
-            <h3 className="news-title-small">YAMA NOTLARI (1.02)</h3>
-            <p className="news-desc-small">3D Stadyum performansı ve denge ayarlamaları.</p>
+            <h3 className="news-title-small">{t.patch_notes}</h3>
+            <p className="news-desc-small">{t.patch_desc}</p>
           </div>
         </div>
         {/* Kesintisiz döngü için kartların kopyası */}
         <div className="news-card big-card">
           <div className="news-img" style={{backgroundImage: "url('assets/messi.png')"}}></div>
           <div className="news-content-overlay">
-            <div className="news-tag">HAFTANIN MAÇI</div>
-            <h2 className="news-title">EFSANELER DÜELLOSU</h2>
-            <p className="news-desc">Messi vs Ronaldo | Dev derbi bu akşam 20:00'da.</p>
+            <div className="news-tag">{t.weekly_match}</div>
+            <h2 className="news-title">{t.legend_duel}</h2>
+            <p className="news-desc">{t.match_desc}</p>
           </div>
         </div>
         <div className="news-card small-card">
           <div className="news-img" style={{backgroundImage: "url('assets/haaland.png')"}}></div>
           <div className="news-content-overlay">
-            <h3 className="news-title-small">YAMA NOTLARI (1.02)</h3>
-            <p className="news-desc-small">3D Stadyum performansı ve denge ayarlamaları.</p>
+            <h3 className="news-title-small">{t.patch_notes}</h3>
+            <p className="news-desc-small">{t.patch_desc}</p>
           </div>
         </div>
       </div>
@@ -165,30 +167,29 @@ export default function App() {
     {/* Oyun Modu Seçim Ekranı */}
     <div id="game-mode-screen" className="game-mode-container" style={{display: 'none'}}>
       <div className="mode-screen-header">
-        <button className="btn-mode-back" onClick={() => {window.hideGameModeSelection()}}>← GERİ</button>
-        <h1 className="mode-screen-title">OYUN MODU SEÇİN</h1>
+        <button className="btn-mode-back" onClick={() => {window.hideGameModeSelection()}}>← {t.back}</button>
+        <h1 className="mode-screen-title">{t.select_mode}</h1>
       </div>
       <div className="mode-cards-wrapper">
-        {/* Derecesiz Kartı */}
-        <div className="mode-card" onClick={() => {window.playLocalGame()}}>
+        {/* Hızlı Eşleşme Kartı */}
+        <div className="mode-card" onClick={() => {window.showOnlineLobby()}}>
           <div className="mode-card-glow"></div>
           <div className="mode-card-content">
-            <span className="mode-tag">STANDART</span>
-            <h2 className="mode-title">DERECESİZ</h2>
-            <p className="mode-desc">Yerel olarak arkadaşlarınızla veya botlarla oynayın. Eğlencenin tadını çıkarın.</p>
-            <div className="mode-action-btn">OYNA</div>
+            <span className="mode-tag">ÇEVRİMİÇİ</span>
+            <h2 className="mode-title">{t.fast_match}</h2>
+            <p className="mode-desc">{t.fast_match_desc}</p>
+            <div className="mode-action-btn">{t.queue_btn}</div>
           </div>
         </div>
 
         {/* Özel Oyun Kartı */}
-        <div className="mode-card" onClick={() => {window.showOnlineLobby()}}>
+        <div className="mode-card" onClick={() => {window.showPrivateRoomSelection()}}>
           <div className="mode-card-glow"></div>
           <div className="mode-card-content">
-            <span className="mode-tag custom">LOBİ</span>
-            <h2 className="mode-title">ÖZEL OYUN</h2>
-            <p className="mode-desc">Kuralları kendiniz belirleyin. Arkadaşlarınızı davet edin ve kendi turnuvanızı kurun.
-            </p>
-            <div className="mode-action-btn">OYNA</div>
+            <span className="mode-tag custom">ÖZEL ODA</span>
+            <h2 className="mode-title">{t.private_game}</h2>
+            <p className="mode-desc">{t.private_game_desc}</p>
+            <div className="mode-action-btn">{t.room_manage}</div>
           </div>
         </div>
       </div>
@@ -215,7 +216,19 @@ export default function App() {
       <div className="social-collapsed-content">
         {isLoggedIn ? (
           <>
-            <div className="collapsed-avatar" style={{backgroundColor: '#29b6f6'}} title={`${user?.username} (Siz)`}>🐐</div>
+            <div className="collapsed-avatar" style={{
+              backgroundColor: '#29b6f6',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              overflow: 'hidden'
+            }} title={`${user?.username} (Siz)`}>
+              {user?.avatar && user.avatar.startsWith('/') ? (
+                <img src={user.avatar} alt="pp" style={{width: '100%', height: '100%', objectFit: 'cover'}} />
+              ) : (
+                user?.avatar || '🐐'
+              )}
+            </div>
             <div className="collapsed-divider"></div>
             {friends.filter(f => f.status === 'accepted').slice(0, 4).map((f, fIdx) => (
               <div key={fIdx} className="collapsed-avatar offline" title={`${f.username} (Çevrimdışı)`}>
@@ -240,7 +253,19 @@ export default function App() {
             {isLoggedIn ? (
               <>
                 <div className="lobby-player-row active">
-                  <div className="player-avatar-mini" style={{backgroundColor: '#29b6f6'}}>🐐</div>
+                  <div className="player-avatar-mini" style={{
+                    backgroundColor: '#29b6f6',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    overflow: 'hidden'
+                  }}>
+                    {user?.avatar && user.avatar.startsWith('/') ? (
+                      <img src={user.avatar} alt="pp" style={{width: '100%', height: '100%', objectFit: 'cover'}} />
+                    ) : (
+                      user?.avatar || '🐐'
+                    )}
+                  </div>
                   <div className="player-info-mini">
                     <div className="player-name-mini">{user?.username}</div>
                     <div className="player-status-mini">Grup Lideri</div>
@@ -435,23 +460,59 @@ export default function App() {
 
   {/* AYARLAR MODALI */}
   <div className="modal-backdrop" id="settings-modal" style={{display: 'none'}}>
-    <div className="modal">
-      <div className="modal-head">
-        <div className="modal-city">⚙️ SİSTEM AYARLARI</div>
-        <div className="modal-league" id="steam-status">Steam: Çevrimdışı Mod</div>
+    <div className="modal" style={{
+      background: 'rgba(20, 24, 33, 0.95)',
+      backdropFilter: 'blur(10px)',
+      border: '1px solid rgba(41, 182, 246, 0.2)',
+      boxShadow: '0 10px 30px rgba(0, 0, 0, 0.5), 0 0 20px rgba(41, 182, 246, 0.1)',
+      borderRadius: '12px',
+      padding: '24px',
+      width: '360px',
+      maxWidth: '90%'
+    }}>
+      <div className="modal-head" style={{ borderBottom: '1px solid rgba(255, 255, 255, 0.1)', paddingBottom: '12px', marginBottom: '20px' }}>
+        <div className="modal-city" style={{ fontSize: '20px', fontWeight: 'bold', color: '#29b6f6', letterSpacing: '1px' }}>⚙️ SİSTEM AYARLARI</div>
+        <div className="modal-league" id="steam-status" style={{ fontSize: '11px', color: '#aaa', marginTop: '4px' }}>Steam: Çevrimdışı Mod</div>
       </div>
-      <div className="modal-body">
+      <div className="modal-body" style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
+        <div style={{ fontSize: '12px', color: '#888', fontWeight: '600', marginBottom: '4px', letterSpacing: '0.5px' }}>OYUN DURUMU</div>
         <button className="mbtn mbtn-upgrade" onClick={() => {window.saveGame()}}
-          style={{width: '100%', marginBottom: '8px', padding: '10px'}}>💾 Oyunu Kaydet</button>
-        <button className="mbtn mbtn-buy" onClick={() => {window.loadGame()}} style={{width: '100%', marginBottom: '8px', padding: '10px'}}>📂
-          Oyunu Yükle</button>
+          style={{ width: '100%', padding: '12px', margin: '0', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px' }}>💾 Oyunu Kaydet</button>
+        <button className="mbtn mbtn-buy" onClick={() => {window.loadGame()}} 
+          style={{ width: '100%', padding: '12px', margin: '0', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px' }}>📂 Oyunu Yükle</button>
+        
+        <div style={{ fontSize: '12px', color: '#888', fontWeight: '600', marginTop: '10px', marginBottom: '4px', letterSpacing: '0.5px' }}>EKRAN & UYGULAMA</div>
         <button className="mbtn mbtn-pass" onClick={() => {window.toggleFullscreen()}}
-          style={{width: '100%', marginBottom: '8px', padding: '10px'}}>🖥️ Tam Ekran Geçiş</button>
+          style={{ width: '100%', padding: '12px', margin: '0', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px' }}>🖥️ Tam Ekran Geçiş</button>
         <button className="mbtn mbtn-pass" onClick={() => {window.confirmExitToMenu()}}
-          style={{width: '100%', background: '#e74c3c', color: '#fff', padding: '10px'}}>❌ Oyundan Çık</button>
+          style={{ width: '100%', background: 'rgba(231, 76, 60, 0.15)', border: '1px solid #e74c3c', color: '#e74c3c', padding: '12px', margin: '0', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px' }}>❌ Oyundan Çık</button>
+        
+        {isLoggedIn && (
+          <>
+            <div style={{ fontSize: '12px', color: '#888', fontWeight: '600', marginTop: '10px', marginBottom: '4px', letterSpacing: '0.5px' }}>HESAP YÖNETİMİ</div>
+            <button className="mbtn" onClick={handleLogout} style={{
+              width: '100%', 
+              background: 'linear-gradient(135deg, #ff5252, #ff1744)',
+              color: '#fff', 
+              padding: '12px', 
+              margin: '0', 
+              border: 'none',
+              borderRadius: '6px',
+              fontWeight: 'bold',
+              cursor: 'pointer',
+              boxShadow: '0 4px 12px rgba(255, 23, 68, 0.3)',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              gap: '8px'
+            }}>
+              🚪 Hesaptan Çıkış Yap
+            </button>
+          </>
+        )}
       </div>
-      <div className="modal-btns">
-        <button className="mbtn mbtn-pass" onClick={() => {window.closeModal('settings-modal')}} style={{width: '100%'}}>Kapat</button>
+      <div className="modal-btns" style={{ marginTop: '20px', borderTop: '1px solid rgba(255, 255, 255, 0.05)', paddingTop: '16px' }}>
+        <button className="mbtn mbtn-pass" onClick={() => {window.closeModal('settings-modal')}} style={{ width: '100%', padding: '10px', margin: '0' }}>Kapat</button>
       </div>
     </div>
   </div>
