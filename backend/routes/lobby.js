@@ -1,12 +1,13 @@
 import express from 'express';
 import { supabase } from '../db.js';
+import { createAuthMiddleware, requireSameUser } from '../middleware/auth.js';
 
 const router = express.Router();
+const authenticate = createAuthMiddleware();
 
 // Lobi sırasına katıl
-router.post('/join', async (req, res) => {
-  const { user_id } = req.body;
-  if (!user_id) return res.status(400).json({ error: 'user_id is required' });
+router.post('/join', authenticate, async (req, res) => {
+  const user_id = req.user.id;
 
   try {
     // 1. Varsa eski sırayı temizle
@@ -26,19 +27,32 @@ router.post('/join', async (req, res) => {
     if (waitingPlayers && waitingPlayers.length > 0) {
       const peer = waitingPlayers[0];
 
+      const { data: session, error: sessionError } = await supabase
+        .from('game_sessions')
+        .insert([{ host_user_id: peer.user_id, status: 'active', mode: 'matchmaking', state_data: {} }])
+        .select()
+        .single();
+
+      if (sessionError) return res.status(400).json({ error: sessionError.message });
+
+      await supabase.from('game_session_players').insert([
+        { session_id: session.id, user_id: peer.user_id, role: 'host' },
+        { session_id: session.id, user_id, role: 'guest' }
+      ]);
+
       // Eşleşme bulundu, her iki tarafı da güncelle
       const { error: updateSelfError } = await supabase
         .from('lobby_queue')
-        .insert([{ user_id, status: 'matched', matched_with: peer.user_id }]);
+        .insert([{ user_id, status: 'matched', matched_with: peer.user_id, session_id: session.id }]);
 
       if (updateSelfError) return res.status(400).json({ error: updateSelfError.message });
 
       await supabase
         .from('lobby_queue')
-        .update({ status: 'matched', matched_with: user_id })
+        .update({ status: 'matched', matched_with: user_id, session_id: session.id })
         .eq('user_id', peer.user_id);
 
-      return res.json({ status: 'matched', matched_with: peer.users?.username || 'Rakip', avatar: peer.users?.avatar || '👤' });
+      return res.json({ status: 'matched', matched_with: peer.users?.username || 'Rakip', avatar: peer.users?.avatar || '👤', session_id: session.id });
     } else {
       // Bekleyen yoksa sıraya ekle
       const { error: insertError } = await supabase
@@ -55,9 +69,8 @@ router.post('/join', async (req, res) => {
 });
 
 // Sıradan ayrıl
-router.post('/leave', async (req, res) => {
-  const { user_id } = req.body;
-  if (!user_id) return res.status(400).json({ error: 'user_id is required' });
+router.post('/leave', authenticate, async (req, res) => {
+  const user_id = req.user.id;
 
   try {
     const { error } = await supabase.from('lobby_queue').delete().eq('user_id', user_id);
@@ -69,7 +82,7 @@ router.post('/leave', async (req, res) => {
 });
 
 // Durumu kontrol et
-router.get('/status/:userId', async (req, res) => {
+router.get('/status/:userId', authenticate, requireSameUser, async (req, res) => {
   try {
     const { data, error } = await supabase
       .from('lobby_queue')
@@ -90,7 +103,8 @@ router.get('/status/:userId', async (req, res) => {
       return res.json({ 
         status: 'matched', 
         matched_with: peerData?.username || 'Rakip',
-        avatar: peerData?.avatar || '👤'
+        avatar: peerData?.avatar || '👤',
+        session_id: data.session_id
       });
     }
 
@@ -101,9 +115,8 @@ router.get('/status/:userId', async (req, res) => {
 });
 
 // Özel oda oluştur (Host)
-router.post('/create-private', async (req, res) => {
-  const { user_id } = req.body;
-  if (!user_id) return res.status(400).json({ error: 'user_id is required' });
+router.post('/create-private', authenticate, async (req, res) => {
+  const user_id = req.user.id;
 
   try {
     await supabase.from('lobby_queue').delete().eq('user_id', user_id);
@@ -122,9 +135,10 @@ router.post('/create-private', async (req, res) => {
 });
 
 // Özel odaya katıl (Guest)
-router.post('/join-private', async (req, res) => {
-  const { user_id, host_username } = req.body;
-  if (!user_id || !host_username) return res.status(400).json({ error: 'Missing fields' });
+router.post('/join-private', authenticate, async (req, res) => {
+  const { host_username } = req.body;
+  const user_id = req.user.id;
+  if (!host_username) return res.status(400).json({ error: 'Missing fields' });
 
   try {
     const { data: host, error: hostError } = await supabase
@@ -149,19 +163,33 @@ router.post('/join-private', async (req, res) => {
 
     await supabase.from('lobby_queue').delete().eq('user_id', user_id);
 
-    await supabase
-      .from('lobby_queue')
-      .insert([{ user_id, status: 'matched', matched_with: host.id }]);
+    const { data: session, error: sessionError } = await supabase
+      .from('game_sessions')
+      .insert([{ host_user_id: host.id, status: 'active', mode: 'private', state_data: {} }])
+      .select()
+      .single();
+
+    if (sessionError) return res.status(400).json({ error: sessionError.message });
+
+    await supabase.from('game_session_players').insert([
+      { session_id: session.id, user_id: host.id, role: 'host' },
+      { session_id: session.id, user_id, role: 'guest' }
+    ]);
 
     await supabase
       .from('lobby_queue')
-      .update({ status: 'matched', matched_with: user_id })
+      .insert([{ user_id, status: 'matched', matched_with: host.id, session_id: session.id }]);
+
+    await supabase
+      .from('lobby_queue')
+      .update({ status: 'matched', matched_with: user_id, session_id: session.id })
       .eq('user_id', host.id);
 
-    return res.json({ status: 'matched', matched_with: host_username });
+    return res.json({ status: 'matched', matched_with: host_username, session_id: session.id });
   } catch (e) {
     res.status(500).json({ error: 'Server error' });
   }
 });
 
 export default router;
+

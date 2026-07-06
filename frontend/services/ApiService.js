@@ -3,7 +3,7 @@
 // Tüm backend REST API çağrılarını merkezi olarak yönetir
 // ==========================================
 
-const API_BASE = 'http://localhost:8000/api';
+const API_BASE = process.env.NEXT_PUBLIC_API_BASE_URL || 'http://localhost:8000/api';
 
 class ApiService {
   constructor() {
@@ -216,7 +216,7 @@ class ApiService {
   async saveGameResult(players) {
     const user = this.getUser();
     if (!user) return { error: 'Giriş yapılmadı' };
-    return await this._post('/games', { user_id: user.id, result_data: { players } });
+    return await this._post('/games', { result_data: { players } });
   }
 
   // ==========================================
@@ -230,7 +230,7 @@ class ApiService {
   async purchaseItem(itemId) {
     const user = this.getUser();
     if (!user) return { error: 'Giriş yapılmadı' };
-    return await this._post('/store/purchase', { user_id: user.id, item_id: itemId });
+    return await this._post('/store/purchase', { item_id: itemId });
   }
 
   async getMyPurchases() {
@@ -254,13 +254,13 @@ class ApiService {
   async joinLobby() {
     const user = this.getUser();
     if (!user) return { error: 'Giriş yapılmadı' };
-    return await this._post('/lobby/join', { user_id: user.id });
+    return await this._post('/lobby/join', {});
   }
 
   async leaveLobby() {
     const user = this.getUser();
     if (!user) return { error: 'Giriş yapılmadı' };
-    return await this._post('/lobby/leave', { user_id: user.id });
+    return await this._post('/lobby/leave', {});
   }
 
   async getLobbyStatus() {
@@ -272,13 +272,13 @@ class ApiService {
   async createPrivateLobby() {
     const user = this.getUser();
     if (!user) return { error: 'Giriş yapılmadı' };
-    return await this._post('/lobby/create-private', { user_id: user.id });
+    return await this._post('/lobby/create-private', {});
   }
 
   async joinPrivateLobby(hostUsername) {
     const user = this.getUser();
     if (!user) return { error: 'Giriş yapılmadı' };
-    return await this._post('/lobby/join-private', { user_id: user.id, host_username: hostUsername });
+    return await this._post('/lobby/join-private', { host_username: hostUsername });
   }
 
   // ==========================================
@@ -294,13 +294,13 @@ class ApiService {
   async addFriend(friendUsername) {
     const user = this.getUser();
     if (!user) return { error: 'Giriş yapılmadı' };
-    return await this._post('/friends/add', { user_id: user.id, friend_username: friendUsername });
+    return await this._post('/friends/add', { friend_username: friendUsername });
   }
 
   async acceptFriendRequest(friendId) {
     const user = this.getUser();
     if (!user) return { error: 'Giriş yapılmadı' };
-    return await this._post('/friends/accept', { user_id: user.id, friend_id: friendId });
+    return await this._post('/friends/accept', { friend_id: friendId });
   }
 
   // ==========================================
@@ -310,7 +310,7 @@ class ApiService {
   async saveGame(saveData) {
     const user = this.getUser();
     if (!user) return { error: 'Giriş yapılmadı' };
-    return await this._post('/saves', { user_id: user.id, save_data: saveData });
+    return await this._post('/saves', { save_data: saveData });
   }
 
   async loadGame() {
@@ -330,8 +330,25 @@ class ApiService {
   async resetPassword(resetToken, newPassword) {
     return await this._post('/auth/reset-password', { resetToken, newPassword });
   }
+
+  // ==========================================
+  // MULTIPLAYER API
+  // ==========================================
+
+  async getMultiplayerSession(sessionId) {
+    return await this._get(`/multiplayer/sessions/${sessionId}`);
+  }
+
+  async updateMultiplayerState(sessionId, stateData, eventType = 'state_update') {
+    return await this._put(`/multiplayer/sessions/${sessionId}/state`, { state_data: stateData, event_type: eventType });
+  }
+
+  async finishMultiplayerSession(sessionId, stateData, resultData) {
+    return await this._post(`/multiplayer/sessions/${sessionId}/finish`, { state_data: stateData, result_data: resultData });
+  }
 }
 
 // Singleton olarak dışarıya ver
 const apiService = new ApiService();
 export default apiService;
+

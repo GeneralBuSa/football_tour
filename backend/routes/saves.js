@@ -1,17 +1,19 @@
 import express from 'express';
 import { supabase } from '../db.js';
+import { createAuthMiddleware, requireSameUser } from '../middleware/auth.js';
 
 const router = express.Router();
+const authenticate = createAuthMiddleware();
 
 // Oyun kaydet (Upsert)
-router.post('/', async (req, res) => {
-  const { user_id, save_data } = req.body;
-  if (!user_id || !save_data) return res.status(400).json({ error: 'user_id and save_data required' });
+router.post('/', authenticate, async (req, res) => {
+  const { save_data } = req.body;
+  if (!save_data) return res.status(400).json({ error: 'save_data required' });
 
   try {
     const { data, error } = await supabase
       .from('game_saves')
-      .upsert({ user_id, save_data, updated_at: new Date().toISOString() })
+      .upsert({ user_id: req.user.id, save_data, updated_at: new Date().toISOString() })
       .select()
       .single();
 
@@ -23,7 +25,7 @@ router.post('/', async (req, res) => {
 });
 
 // Oyun yükle
-router.get('/:userId', async (req, res) => {
+router.get('/:userId', authenticate, requireSameUser, async (req, res) => {
   const { userId } = req.params;
 
   try {

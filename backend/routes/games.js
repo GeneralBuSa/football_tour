@@ -1,9 +1,11 @@
 import express from 'express';
 import { supabase } from '../db.js';
+import { createAuthMiddleware, requireSameUser } from '../middleware/auth.js';
 
 const router = express.Router();
+const authenticate = createAuthMiddleware();
 
-router.get('/:userId', async (req, res) => {
+router.get('/:userId', authenticate, requireSameUser, async (req, res) => {
   const { data, error } = await supabase
     .from('games')
     .select('*')
@@ -14,13 +16,13 @@ router.get('/:userId', async (req, res) => {
   res.json(data);
 });
 
-router.post('/', async (req, res) => {
-  const { user_id, result_data } = req.body;
-  if (!user_id || !result_data) return res.status(400).json({ error: 'user_id and result_data required' });
+router.post('/', authenticate, async (req, res) => {
+  const { result_data } = req.body;
+  if (!result_data) return res.status(400).json({ error: 'result_data required' });
 
   const { data, error } = await supabase
     .from('games')
-    .insert([{ user_id, result_data }])
+    .insert([{ user_id: req.user.id, result_data }])
     .select()
     .single();
 

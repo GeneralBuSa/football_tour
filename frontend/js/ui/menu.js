@@ -1,8 +1,4 @@
-// ==========================================
-// MENÜ VE NAVİGASYON FONKSİYONLARI
-// ==========================================
-
-import { PLAYERS, gameTime, setTutorialText, timerId, setTimerId, setGameTime } from '../engine/state.js';
+import { PLAYERS, setPlayers, gameTime, setTutorialText, timerId, setTimerId, setGameTime, resetState } from '../engine/state.js';
 import { buildBoard } from '../engine/board.js';
 import { openCityModal, closeModal } from './modal.js';
 import { showNotif, updateTutorialHUD } from './panel.js';
@@ -10,8 +6,54 @@ import { renderPlayers } from '../engine/player.js';
 import { startTimer } from './settings.js';
 import apiService from '../../services/ApiService.js';
 
-// Yerel oyun başlatma
-export function playLocalGame() {
+// Oyun başlatma — options.sessionId varsa multiplayer session başlatılır
+export function playLocalGame(options = {}) {
+  resetState();
+
+  const sessionId = options.sessionId;
+  if (sessionId) {
+    // Çevrimiçi oyunda sadece 2 oyuncu (Host vs Guest) yer alır
+    setPlayers(PLAYERS.slice(0, 2));
+
+    apiService.getMultiplayerSession(sessionId).then(session => {
+      if (session && Array.isArray(session.game_session_players)) {
+        const hostPlayer = session.game_session_players.find(p => p.role === 'host');
+        const guestPlayer = session.game_session_players.find(p => p.role === 'guest');
+
+        if (hostPlayer && hostPlayer.users) {
+          PLAYERS[0].name = hostPlayer.users.username;
+          if (hostPlayer.users.avatar) {
+            PLAYERS[0].avatar = hostPlayer.users.avatar;
+          }
+        }
+        if (guestPlayer && guestPlayer.users) {
+          PLAYERS[1].name = guestPlayer.users.username;
+          if (guestPlayer.users.avatar) {
+            PLAYERS[1].avatar = guestPlayer.users.avatar;
+          }
+        }
+        renderPlayers();
+      }
+    }).catch(e => console.warn('[Multiplayer] session oyuncuları yüklenemedi', e));
+
+    Promise.all([
+      import('../../services/MultiplayerService.js'),
+      import('../engine/snapshot.js')
+    ]).then(([{ default: multiplayerService }, { applyGameSnapshot }]) => {
+      multiplayerService.start(sessionId, (stateData) => {
+        multiplayerService.setApplyingRemoteState(true);
+        try {
+          applyGameSnapshot(stateData);
+        } finally {
+          multiplayerService.setApplyingRemoteState(false);
+        }
+      });
+    }).catch(e => console.warn('[Multiplayer] session başlatılamadı', e));
+  }
+
+  buildBoard(openCityModal);
+  renderPlayers();
+
   if (typeof window.triggerPageTransition === 'function') {
     window.triggerPageTransition(() => {
       const mainMenu = document.getElementById('main-menu');
@@ -28,7 +70,7 @@ export function playLocalGame() {
       // Piyon konumlarını güncelle
       if (window.update3DPawnsTargetPositions) window.update3DPawnsTargetPositions();
 
-      showNotif('Oyun Başladı! Sıra Messi\'de ⚽');
+      showNotif(sessionId ? 'Çevrimiçi Oyun Başladı! ⚽' : 'Oyun Başladı! Sıra Messi\'de ⚽');
 
       // Loading ekranını tekrar kapat
       const overlay = document.querySelector('.loading-transition-overlay');
@@ -47,7 +89,7 @@ export function playLocalGame() {
 
     startTimer();
     if (window.update3DPawnsTargetPositions) window.update3DPawnsTargetPositions();
-    showNotif('Oyun Başladı! Sıra Messi\'de ⚽');
+    showNotif(sessionId ? 'Çevrimiçi Oyun Başladı! ⚽' : 'Oyun Başladı! Sıra Messi\'de ⚽');
   }
 }
 
@@ -119,11 +161,17 @@ export async function showOnlineLobby() {
         const spinner = document.querySelector('.lobby-spinner');
         if (spinner) spinner.style.display = 'none';
 
+        // Eşleşme session_id'sini sakla, oyun başlatılırken multiplayer'a aktar
+        const matchedSessionId = statusRes.session_id;
         const modalBtns = document.querySelector('#lobby-modal .modal-btns');
         if (modalBtns) {
           modalBtns.innerHTML = `
-            <button class="mbtn mbtn-buy" onclick="window.closeModal('lobby-modal'); window.playLocalGame();" style="width: 100%">Oyunu Başlat</button>
+            <button class="mbtn mbtn-buy" id="btn-start-matched" style="width: 100%">Oyunu Başlat</button>
           `;
+          document.getElementById('btn-start-matched').addEventListener('click', () => {
+            closeModal('lobby-modal');
+            playLocalGame({ sessionId: matchedSessionId });
+          });
         }
       }
     }, 2000);
@@ -472,11 +520,17 @@ function startPrivateLobbyCheck() {
       const spinner = document.querySelector('.lobby-spinner');
       if (spinner) spinner.style.display = 'none';
 
+      // Eşleşme session_id'sini sakla, oyun başlatılırken multiplayer'a aktar
+      const matchedSessionId = statusRes.session_id;
       const modalBtns = document.querySelector('#lobby-modal .modal-btns');
       if (modalBtns) {
         modalBtns.innerHTML = `
-          <button class="mbtn mbtn-buy" onclick="window.closeModal('lobby-modal'); window.playLocalGame();" style="width: 100%">Oyunu Başlat</button>
+          <button class="mbtn mbtn-buy" id="btn-start-private-matched" style="width: 100%">Oyunu Başlat</button>
         `;
+        document.getElementById('btn-start-private-matched').addEventListener('click', () => {
+          closeModal('lobby-modal');
+          playLocalGame({ sessionId: matchedSessionId });
+        });
       }
     }
   }, 2000);

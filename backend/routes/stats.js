@@ -1,7 +1,9 @@
 import express from 'express';
 import { supabase } from '../db.js';
+import { createAuthMiddleware, requireSameUser } from '../middleware/auth.js';
 
 const router = express.Router();
+const authenticate = createAuthMiddleware();
 
 // Liderlik tablosu için tüm istatistikleri getir
 router.get('/', async (req, res) => {
@@ -29,7 +31,7 @@ router.get('/', async (req, res) => {
   }
 });
 
-router.get('/:userId', async (req, res) => {
+router.get('/:userId', authenticate, requireSameUser, async (req, res) => {
   const { data, error } = await supabase
     .from('stats')
     .select('*')
@@ -40,8 +42,23 @@ router.get('/:userId', async (req, res) => {
   res.json(data);
 });
 
-router.put('/:userId', async (req, res) => {
-  const updates = { ...req.body, updated_at: new Date().toISOString() };
+router.put('/:userId', authenticate, requireSameUser, async (req, res) => {
+  const allowedFields = [
+    'total_earnings',
+    'total_properties',
+    'games_played',
+    'highest_money',
+    'wins',
+    'total_turns',
+    'xp'
+  ];
+  const updates = Object.fromEntries(
+    Object.entries(req.body).filter(([key]) => allowedFields.includes(key))
+  );
+  if (Object.keys(updates).length === 0) {
+    return res.status(400).json({ error: 'No valid stats fields provided' });
+  }
+  updates.updated_at = new Date().toISOString();
   
   const { data, error } = await supabase
     .from('stats')

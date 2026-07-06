@@ -1,10 +1,12 @@
 import express from 'express';
 import { supabase } from '../db.js';
+import { createAuthMiddleware, requireSameUser } from '../middleware/auth.js';
 
 const router = express.Router();
+const authenticate = createAuthMiddleware();
 
 // Arkadaşları listele
-router.get('/:userId', async (req, res) => {
+router.get('/:userId', authenticate, requireSameUser, async (req, res) => {
   const { userId } = req.params;
 
   try {
@@ -59,9 +61,10 @@ router.get('/:userId', async (req, res) => {
 });
 
 // Arkadaş isteği gönder
-router.post('/add', async (req, res) => {
-  const { user_id, friend_username } = req.body;
-  if (!user_id || !friend_username) return res.status(400).json({ error: 'Missing fields' });
+router.post('/add', authenticate, async (req, res) => {
+  const { friend_username } = req.body;
+  const user_id = req.user.id;
+  if (!friend_username) return res.status(400).json({ error: 'Missing fields' });
 
   try {
     // 1. Kullanıcıyı bul
@@ -89,9 +92,10 @@ router.post('/add', async (req, res) => {
 });
 
 // Arkadaşlık isteğini kabul et
-router.post('/accept', async (req, res) => {
-  const { user_id, friend_id } = req.body;
-  if (!user_id || !friend_id) return res.status(400).json({ error: 'Missing fields' });
+router.post('/accept', authenticate, async (req, res) => {
+  const { friend_id } = req.body;
+  const user_id = req.user.id;
+  if (!friend_id) return res.status(400).json({ error: 'Missing fields' });
 
   try {
     const { data, error } = await supabase

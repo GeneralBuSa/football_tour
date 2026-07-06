@@ -11,7 +11,7 @@ import {
 import { boardCells, buildBoard } from './board.js';
 import { addLog, showNotif, updateTutorialHUD } from '../ui/panel.js';
 import { openCityModal } from '../ui/modal.js';
-import { renderPlayers } from './player.js';
+import { finishGameIfNeeded, renderPlayers, syncMultiplayerState } from './player.js';
 import { renderPanel } from '../ui/panel.js';
 import { openLootBox } from './economy.js';
 import gameService from '../../services/GameService.js';
@@ -55,12 +55,16 @@ export function movePlayer(steps) {
   buildBoard(openCityModal);
   setTimeout(() => {
     handleCell(p, cell, newPos);
+    finishGameIfNeeded('bankruptcy');
 
     const endBtn = document.getElementById('btn-end');
-    if (endBtn) endBtn.style.display = '';
+    if (endBtn) endBtn.style.display = p.money <= 0 ? 'none' : '';
 
     renderPlayers();
     renderPanel();
+
+    // Multiplayer: Zar atma ve piyon hareketi sonrası state sync
+    syncMultiplayerState('dice_roll');
   }, 300);
 }
 
@@ -129,3 +133,5 @@ export function handleCell(p, cell, pos) {
   }
   updateTutorialHUD();
 }
+
+

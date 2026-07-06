@@ -1,26 +1,36 @@
-import express from 'express';
+﻿import express from 'express';
 import bcrypt from 'bcryptjs';
 import jwt from 'jsonwebtoken';
 import { supabase } from '../db.js';
+import { createAuthMiddleware, requireEnv } from '../middleware/auth.js';
+import { isEmailConfigured, sendPasswordResetEmail } from '../services/email.js';
 
 const router = express.Router();
+const authenticate = createAuthMiddleware();
+const jwtSecret = requireEnv('JWT_SECRET');
+const resetAttempts = new Map();
 
-// Middleware to extract token and get user
-const authenticate = (req, res, next) => {
-  const token = req.headers.authorization?.split(' ')[1];
-  if (!token) return res.status(401).json({ error: 'No token provided' });
+function isStrongEnoughPassword(password) {
+  return typeof password === 'string' && password.length >= 8;
+}
 
-  jwt.verify(token, process.env.JWT_SECRET || 'secret', (err, decoded) => {
-    if (err) return res.status(401).json({ error: 'Invalid token' });
-    req.user = decoded;
-    next();
-  });
-};
+function isResetRateLimited(key) {
+  const now = Date.now();
+  const windowMs = 15 * 60 * 1000;
+  const maxAttempts = 5;
+  const attempts = (resetAttempts.get(key) || []).filter(ts => now - ts < windowMs);
+  attempts.push(now);
+  resetAttempts.set(key, attempts);
+  return attempts.length > maxAttempts;
+}
 
 // Register
 router.post('/register', async (req, res) => {
   const { username, email, password } = req.body;
   if (!username || !email || !password) return res.status(400).json({ error: 'Missing fields' });
+  if (!isStrongEnoughPassword(password)) {
+    return res.status(400).json({ error: 'Şifre en az 8 karakter olmalıdır.' });
+  }
 
   try {
     // Kullanıcı adı kontrolü
@@ -54,7 +64,7 @@ router.post('/register', async (req, res) => {
 
     if (error) return res.status(400).json({ error: error.message });
 
-    const token = jwt.sign({ id: data.id, username: data.username }, process.env.JWT_SECRET || 'secret');
+    const token = jwt.sign({ id: data.id, username: data.username }, jwtSecret, { expiresIn: '7d' });
     
     // Create initial stats for the user
     await supabase.from('stats').insert([{ user_id: data.id, total_earnings: 2000 }]);
@@ -81,7 +91,7 @@ router.post('/login', async (req, res) => {
     const isMatch = await bcrypt.compare(password, data.password_hash);
     if (!isMatch) return res.status(400).json({ error: 'Invalid credentials' });
 
-    const token = jwt.sign({ id: data.id, username: data.username }, process.env.JWT_SECRET || 'secret');
+    const token = jwt.sign({ id: data.id, username: data.username }, jwtSecret, { expiresIn: '7d' });
     res.json({ token, user: { id: data.id, username: data.username, email: data.email, avatar: data.avatar } });
   } catch (e) {
     res.status(500).json({ error: 'Server error' });
@@ -107,9 +117,7 @@ router.get('/me', authenticate, async (req, res) => {
 // Update Avatar
 router.put('/avatar', authenticate, async (req, res) => {
   const { avatar } = req.body;
-  console.log("[Backend Auth] PUT /avatar request received! req.user:", req.user, "avatar from body:", avatar);
   if (!avatar) {
-    console.warn("[Backend Auth] Avatar value is missing in request body!");
     return res.status(400).json({ error: 'Avatar gereklidir' });
   }
 
@@ -121,14 +129,9 @@ router.put('/avatar', authenticate, async (req, res) => {
       .select('id, username, email, avatar')
       .single();
 
-    if (error) {
-      console.error("[Backend Auth] Avatar update database error:", error.message);
-      return res.status(400).json({ error: error.message });
-    }
-    console.log("[Backend Auth] Avatar update success! New user data:", data);
+    if (error) return res.status(400).json({ error: error.message });
     res.json(data);
   } catch (e) {
-    console.error("[Backend Auth] Avatar update crash:", e);
     res.status(500).json({ error: 'Server error' });
   }
 });
@@ -137,6 +140,10 @@ router.put('/avatar', authenticate, async (req, res) => {
 router.post('/forgot-password', async (req, res) => {
   const { username, email } = req.body;
   if (!username || !email) return res.status(400).json({ error: 'Eksik bilgi girdiniz.' });
+  const rateKey = `${username}:${email}:${req.ip}`;
+  if (isResetRateLimited(rateKey)) {
+    return res.status(429).json({ error: 'Çok fazla deneme yapıldı. Lütfen daha sonra tekrar deneyin.' });
+  }
 
   try {
     const { data, error } = await supabase
@@ -153,11 +160,16 @@ router.post('/forgot-password', async (req, res) => {
     // 15 dakikalık geçici şifre sıfırlama token'ı oluştur
     const resetToken = jwt.sign(
       { id: data.id, purpose: 'password-reset' },
-      process.env.JWT_SECRET || 'secret',
+      jwtSecret,
       { expiresIn: '15m' }
     );
 
-    res.json({ success: true, resetToken });
+if (isEmailConfigured()) {
+      await sendPasswordResetEmail({ to: data.email, username: data.username, resetToken });
+      return res.json({ success: true, emailSent: true });
+    }
+
+    res.json({ success: true, resetToken, devResetToken: true });
   } catch (e) {
     res.status(500).json({ error: 'Sunucu hatası.' });
   }
@@ -167,10 +179,13 @@ router.post('/forgot-password', async (req, res) => {
 router.post('/reset-password', async (req, res) => {
   const { resetToken, newPassword } = req.body;
   if (!resetToken || !newPassword) return res.status(400).json({ error: 'Eksik bilgi girdiniz.' });
+  if (!isStrongEnoughPassword(newPassword)) {
+    return res.status(400).json({ error: 'Yeni şifre en az 8 karakter olmalıdır.' });
+  }
 
   try {
     // Token doğrula
-    const decoded = jwt.verify(resetToken, process.env.JWT_SECRET || 'secret');
+    const decoded = jwt.verify(resetToken, jwtSecret);
     if (decoded.purpose !== 'password-reset') {
       return res.status(400).json({ error: 'Geçersiz şifre sıfırlama talebi.' });
     }
@@ -190,3 +205,5 @@ router.post('/reset-password', async (req, res) => {
 });
 
 export default router;
+
+

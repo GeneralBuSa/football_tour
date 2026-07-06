@@ -1,25 +1,32 @@
-// ==========================================
+﻿// ==========================================
 // AYARLAR, TEMA, KAYIT/YÜKLEME
 // ==========================================
 
 import {
   PLAYERS, currentPlayer, turnCount, gameLog, gameTime, timerId,
   setPlayers, setCurrentPlayer, setTurnCount, setGameLog, setGameTime,
-  setTimerId, setTutorialText, setDiceRolled
+  setTimerId, setTutorialText, setDiceRolled, setGameEnded
 } from '../engine/state.js';
 import { buildBoard } from '../engine/board.js';
 import { openCityModal, closeModal } from './modal.js';
 import { showNotif, updateTutorialHUD, renderPanel } from './panel.js';
-import { renderPlayers } from '../engine/player.js';
+import { finishGame, renderPlayers } from '../engine/player.js';
 import { updateStadiums3D } from '../3d/stadiums.js';
 import gameService from '../../services/GameService.js';
+import { applyGameSnapshot, getGameSnapshot } from '../engine/snapshot.js';
 
 // Zaman sayacı
 export function startTimer() {
   if (timerId) clearInterval(timerId);
   const id = setInterval(() => {
     if (gameTime > 0) {
-      setGameTime(gameTime - 1);
+      const nextTime = gameTime - 1;
+      setGameTime(nextTime);
+      if (nextTime <= 0) {
+        clearInterval(id);
+        setTimerId(null);
+        finishGame('time');
+      }
     }
     const min = String(Math.floor(gameTime / 60)).padStart(2, '0');
     const sec = String(gameTime % 60).padStart(2, '0');
@@ -49,17 +56,8 @@ export async function initSteam() {
 
 // Oyun kaydetme
 export async function saveGame() {
-  const saveData = {
-    players: PLAYERS.map(p => ({
-      name: p.name, avatar: p.avatar, color: p.color,
-      money: p.money, pos: p.pos, ownedProps: p.ownedProps,
-      stadiums: p.stadiums, theme: p.theme
-    })),
-    currentPlayer: currentPlayer,
-    turnCount: turnCount,
-    gameLog: gameLog,
-    gameTime: gameTime
-  };
+  const saveData = getGameSnapshot();
+
 
   const result = await gameService.saveGame(saveData);
   showNotif(result.message);
@@ -87,36 +85,9 @@ export async function loadGame() {
 // Kayıt verisini uygula
 export function applySaveData(dataStr) {
   try {
-    const data = JSON.parse(dataStr);
-    setPlayers(data.players);
-    setCurrentPlayer(data.currentPlayer);
-    setTurnCount(data.turnCount);
-    setGameLog(data.gameLog);
-    setGameTime(data.gameTime || 1800);
+const data = JSON.parse(dataStr);
+    applyGameSnapshot(data);
 
-    document.getElementById('turn-badge').textContent = `TUR ${turnCount}`;
-    document.getElementById('phase-label').textContent = `${PLAYERS[currentPlayer].name}'nin sırası`;
-
-    setTutorialText(`Kayıt yüklendi! Sıradaki oyuncu: ${PLAYERS[currentPlayer].name}`);
-    updateTutorialHUD();
-
-    const rollBtn = document.getElementById('btn-roll');
-    const centerRollBtn = document.getElementById('btn-center-roll');
-    if (rollBtn) {
-      rollBtn.disabled = false;
-      rollBtn.style.display = '';
-    }
-    if (centerRollBtn) {
-      centerRollBtn.disabled = false;
-      centerRollBtn.style.display = '';
-    }
-    const endBtn = document.getElementById('btn-end');
-    if (endBtn) endBtn.style.display = 'none';
-
-    buildBoard(openCityModal);
-    renderPlayers();
-    renderPanel();
-    setTimeout(() => updateStadiums3D(), 500);
   } catch (e) {
     showNotif("Veri yüklenemedi!");
   }
@@ -200,6 +171,7 @@ export function exitToMainMenu() {
   }
 
   setGameTime(1800);
+  setGameEnded(false);
 
   const mainMenu = document.getElementById('main-menu');
   const appElement = document.getElementById('app');
@@ -208,3 +180,4 @@ export function exitToMainMenu() {
 
   showNotif('Ana menüye dönüldü.');
 }
+

@@ -1,9 +1,11 @@
 import express from 'express';
 import { supabase } from '../db.js';
+import { createAuthMiddleware, requireSameUser } from '../middleware/auth.js';
 
 const router = express.Router();
+const authenticate = createAuthMiddleware();
 
-router.get('/:userId', async (req, res) => {
+router.get('/:userId', authenticate, requireSameUser, async (req, res) => {
   const { data, error } = await supabase
     .from('achievements')
     .select('*')
@@ -13,7 +15,7 @@ router.get('/:userId', async (req, res) => {
   res.json(data);
 });
 
-router.post('/:userId', async (req, res) => {
+router.post('/:userId', authenticate, requireSameUser, async (req, res) => {
   const { achievement_id } = req.body;
   if (!achievement_id) return res.status(400).json({ error: 'achievement_id required' });
 

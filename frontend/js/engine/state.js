@@ -18,6 +18,7 @@ export let gameLog = [];
 export let activeTab = 'props';
 export let gameTime = 1800;
 export let timerId = null;
+export let gameEnded = false;
 export let currentTutorialText = "Oyunun amacı mülk satın almak ve zenginleşmektir. Eğer diğer oyuncuların önünde zenginleşebilirseniz şampiyon olursunuz.";
 
 // State güncelleme fonksiyonları
@@ -28,6 +29,7 @@ export function setDiceRolled(val) { diceRolled = val; }
 export function setActiveTab(val) { activeTab = val; }
 export function setGameTime(val) { gameTime = val; }
 export function setTimerId(val) { timerId = val; }
+export function setGameEnded(val) { gameEnded = val; }
 export function setTutorialText(val) { currentTutorialText = val; }
 
 export function addLogEntry(entry) {
@@ -51,5 +53,6 @@ export function resetState() {
   activeTab = 'props';
   gameTime = 1800;
   timerId = null;
+  gameEnded = false;
   currentTutorialText = "Oyunun amacı mülk satın almak ve zenginleşmektir. Eğer diğer oyuncuların önünde zenginleşebilirseniz şampiyon olursunuz.";
 }

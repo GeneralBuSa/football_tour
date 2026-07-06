@@ -1,24 +1,14 @@
 'use client';
 import { useEffect, useState } from 'react';
+import useSession from '../shared/useSession.js';
+import PageShell from '../shared/PageShell.jsx';
 import apiService from '../../../services/ApiService.js';
-import tr from '../../locales/tr.json';
-import en from '../../locales/en.json';
 
 export default function ProfilePage() {
-  const [isLoggedIn, setIsLoggedIn] = useState(false);
+  const { isLoggedIn, user: sessionUser, stats, setStats, language, mounted, gameReady, t, apiService: api } = useSession();
   const [user, setUser] = useState(null);
-  const [stats, setStats] = useState({
-    total_earnings: 2000,
-    total_properties: 0,
-    games_played: 0,
-    highest_money: 0,
-    wins: 0,
-    total_turns: 0,
-    xp: 0
-  });
   const [purchases, setPurchases] = useState([]);
   const [loading, setLoading] = useState(true);
-  const [language, setLanguage] = useState('Türkçe');
   const [showAvatarModal, setShowAvatarModal] = useState(false);
   const [selectedAvatar, setSelectedAvatar] = useState('🐐');
   const [tempAvatar, setTempAvatar] = useState('🐐');
@@ -66,38 +56,27 @@ export default function ProfilePage() {
     }
   };
 
-  const [mounted, setMounted] = useState(false);
-
+  // sessionUser değiştiğinde yerel user state'ini güncelle
   useEffect(() => {
-    // 1. Client-side durumları hemen yükle (Dil ve giriş durumu)
-    const logged = apiService.isLoggedIn();
-    setIsLoggedIn(logged);
-    
-    const savedLang = localStorage.getItem('ft26_language');
-    if (savedLang) setLanguage(savedLang);
-
-    if (logged) {
-      const u = apiService.getUser();
-      setUser(u);
-      setSelectedAvatar(u?.avatar || '🐐');
-      setTempAvatar(u?.avatar || '🐐');
+    if (sessionUser) {
+      setUser(sessionUser);
+      setSelectedAvatar(sessionUser.avatar || '🐐');
+      setTempAvatar(sessionUser.avatar || '🐐');
     }
-    setMounted(true);
+  }, [sessionUser]);
 
-    // 2. game.js dinamik modülünü ve ek verileri arka planda yükle
-    import('../../../js/game.js').then(async () => {
-      if (logged) {
-        const u = apiService.getUser();
+  // game.js hazır olunca profil verilerini yükle
+  useEffect(() => {
+    if (!gameReady) return;
+
+    if (isLoggedIn && sessionUser) {
+      (async () => {
         try {
           const meRes = await apiService.getMe();
           if (meRes && !meRes.error) {
             setUser(meRes);
             setSelectedAvatar(meRes.avatar || '🐐');
             setTempAvatar(meRes.avatar || '🐐');
-          }
-          const statsRes = await apiService.getStats(u.id);
-          if (statsRes && !statsRes.error) {
-            setStats(statsRes);
           }
           
           const purchasesRes = await apiService.getMyPurchases();
@@ -107,10 +86,12 @@ export default function ProfilePage() {
         } catch (e) {
           console.error("Profil yükleme hatası:", e);
         }
-      }
+        setLoading(false);
+      })();
+    } else {
       setLoading(false);
-    }).catch(console.error);
-  }, []);
+    }
+  }, [gameReady, isLoggedIn, sessionUser]);
 
   const currentXp = stats.xp || 0;
   let currentLevel = 1;
@@ -129,57 +110,8 @@ export default function ProfilePage() {
   const xpNeededForNext = nextLevelXp - prevLevelXp;
   const progressPercent = xpNeededForNext > 0 ? Math.min(100, (xpInCurrentLevel / xpNeededForNext) * 100) : 100;
 
-  const t = language === 'English' ? en : tr;
-
   return (
-    <div style={{ opacity: mounted ? 1 : 0, transition: 'opacity 0.15s ease-in-out' }}>
-      {/* Arka Plan Videosu */}
-      <div className="main-menu-container" style={{position: 'fixed', top: '0', left: '0', width: '100%', height: '100%', zIndex: '-1'}}>
-        <video autoPlay loop muted playsInline id="bg-video" className="menu-video-bg">
-          <source src="../assets/bg-video.mp4?v=2" type="video/mp4" />
-        </video>
-        <div className="menu-overlay"></div>
-      </div>
-
-      {/* Üst Navigasyon Barı */}
-      <div className="menu-top-nav" style={{position: 'fixed', top: '0', left: '0', width: '100%', zIndex: '10'}}>
-        <div className="top-nav-left">
-          <div className="menu-logo" onClick={() => {window.location.href='/'}} style={{cursor: 'pointer'}}>
-            <img src="/assets/logo.png" alt="FT26 Logo" className="logo-img" />
-          </div>
-        </div>
-        <div className="top-nav-center">
-          <div className="nav-icons-group left">
-            <div className="nav-item-icon" title="Ana Sayfa" onClick={() => {window.location.href='/'}}>🏠</div>
-            <div className="nav-item-icon" title="Savaş Geçmişi" onClick={() => {window.location.href='/history'}}>📜</div>
-            <div className="nav-item-icon active" title="Profil" onClick={() => {window.location.href='/profile'}}>👤</div>
-          </div>
-          <button className="btn-play-tactical" onClick={() => {window.location.href='/?play=true'}}>{t.play}</button>
-          <div className="nav-icons-group right">
-            <div className="nav-item-icon" title="Başarımlar" onClick={() => {window.location.href='/achievements'}}>🏆</div>
-            <div className="nav-item-icon" title="Mağaza" onClick={() => {window.location.href='/store'}}>🛒</div>
-            <div className="nav-item-icon" title="Ayarlar" onClick={() => {window.location.href='/settings'}}>⚙️</div>
-          </div>
-        </div>
-        <div className="top-nav-right">
-          {isLoggedIn ? (
-            <div className="user-stats">
-              <div className="stat-item" title={t.earnings}>
-                <span style={{display: "flex", alignItems: "center", justifyContent: "center", height: "100%"}}>🪙</span>
-                <span style={{display: "flex", alignItems: "center", position: "relative", top: "0.5px"}}>
-                  ₺{(stats.total_earnings || 0).toLocaleString()}
-                </span>
-              </div>
-            </div>
-          ) : (
-            <button className="btn-login-oval" onClick={() => {window.location.href='/auth'}}>
-              {t.login_btn}
-            </button>
-          )}
-        </div>
-      </div>
-
-      <div className="profile-page-container" style={{marginTop: '80px', padding: '20px'}}>
+    <PageShell activePage="profile" stats={stats} t={t} mounted={mounted}>
         <div className="menu-dynamic-screen">
           <div className="dynamic-screen-header" style={{display: 'flex', alignItems: 'center', gap: '16px', borderBottom: '2px solid rgba(41, 182, 246, 0.3)'}}>
             <button className="btn-mode-back" onClick={() => {window.location.href='/'}} style={{margin: '0', padding: '6px 12px', fontSize: '12px'}}>← {t.back}</button>
@@ -469,7 +401,7 @@ export default function ProfilePage() {
                             boxShadow: '0 4px 15px rgba(0, 229, 255, 0.05)'
                           }}>
                             <span style={{ fontSize: '16px' }}>🎁</span>
-                            <span>{p.item_name || 'Özel Eşya'}</span>
+                            <span>{p.store_items?.name || p.item_name || 'Özel Eşya'}</span>
                           </div>
                         ))}
                       </div>
@@ -480,8 +412,6 @@ export default function ProfilePage() {
             )}
           </div>
         </div>
-      </div>
-
       {showAvatarModal && (
         <div className="modal-backdrop" style={{ zIndex: 1000 }}>
           <div className="modal" style={{ maxWidth: '400px' }}>
@@ -529,6 +459,6 @@ export default function ProfilePage() {
           </div>
         </div>
       )}
-    </div>
+    </PageShell>
   );
 }

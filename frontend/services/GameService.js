@@ -174,7 +174,7 @@ class PlayerService {
   }
 
   // Oyun sonu istatistik kaydı
-  recordGameEnd(players, turnCount) {
+  recordGameEnd(players, turnCount, reason = 'completed') {
     players.forEach(p => {
       const current = this.getStats(p.name);
       this.updateStats(p.name, {
@@ -198,7 +198,7 @@ class PlayerService {
     // Supabase API entegrasyonu
     if (apiService.isLoggedIn()) {
       const currentUser = apiService.getUser();
-      apiService.saveGameResult(players).catch(console.error);
+      apiService.saveGameResult(players.map(p => ({ ...p, resultReason: reason }))).catch(console.error);
       
       const userPlayer = players.find(p => p.name === currentUser.username) || players[0];
       if (userPlayer) {
@@ -209,6 +209,9 @@ class PlayerService {
 
         // Yerelde de güncelle
         this.updateStats(userPlayer.name, { xp: newXp });
+        if (isUserWinner) {
+          this.achievement.unlock('FIRST_WIN').catch(console.error);
+        }
         this._saveStats();
 
         apiService.updateStats(currentUser.id, {

@@ -1,6 +1,7 @@
--- ==========================================
+﻿-- ==========================================
 -- SUPABASE POSTGRESQL SCHEMA
 -- ==========================================
+CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
 
 -- 1. USERS TABLE
 CREATE TABLE IF NOT EXISTS public.users (
@@ -56,7 +57,8 @@ CREATE TABLE IF NOT EXISTS public.purchases (
     id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
     user_id UUID REFERENCES public.users(id) ON DELETE CASCADE,
     item_id UUID REFERENCES public.store_items(id) ON DELETE CASCADE,
-    purchased_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+    purchased_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+    UNIQUE(user_id, item_id)
 );
 
 -- ==========================================
@@ -69,14 +71,21 @@ ALTER TABLE public.games ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.store_items ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.purchases ENABLE ROW LEVEL SECURITY;
 
--- Servis rolü ile backend üzerinden erişeceğimiz için 
--- genel okuma/yazma politikalarını backend servisine açık bırakıyoruz:
-CREATE POLICY "Allow Service Role" ON public.users FOR ALL USING (true) WITH CHECK (true);
-CREATE POLICY "Allow Service Role" ON public.stats FOR ALL USING (true) WITH CHECK (true);
-CREATE POLICY "Allow Service Role" ON public.achievements FOR ALL USING (true) WITH CHECK (true);
-CREATE POLICY "Allow Service Role" ON public.games FOR ALL USING (true) WITH CHECK (true);
-CREATE POLICY "Allow Service Role" ON public.store_items FOR ALL USING (true) WITH CHECK (true);
-CREATE POLICY "Allow Service Role" ON public.purchases FOR ALL USING (true) WITH CHECK (true);
+-- Backend service role anahtarıyla çalışır. Anon/client rolleri bu tablolara
+-- doğrudan erişmemelidir; erişim backend API üzerinden yapılır.
+DROP POLICY IF EXISTS "Allow Service Role" ON public.users;
+DROP POLICY IF EXISTS "Allow Service Role" ON public.stats;
+DROP POLICY IF EXISTS "Allow Service Role" ON public.achievements;
+DROP POLICY IF EXISTS "Allow Service Role" ON public.games;
+DROP POLICY IF EXISTS "Allow Service Role" ON public.store_items;
+DROP POLICY IF EXISTS "Allow Service Role" ON public.purchases;
+
+CREATE POLICY "Allow Service Role" ON public.users FOR ALL USING (auth.role() = 'service_role') WITH CHECK (auth.role() = 'service_role');
+CREATE POLICY "Allow Service Role" ON public.stats FOR ALL USING (auth.role() = 'service_role') WITH CHECK (auth.role() = 'service_role');
+CREATE POLICY "Allow Service Role" ON public.achievements FOR ALL USING (auth.role() = 'service_role') WITH CHECK (auth.role() = 'service_role');
+CREATE POLICY "Allow Service Role" ON public.games FOR ALL USING (auth.role() = 'service_role') WITH CHECK (auth.role() = 'service_role');
+CREATE POLICY "Allow Service Role" ON public.store_items FOR ALL USING (auth.role() = 'service_role') WITH CHECK (auth.role() = 'service_role');
+CREATE POLICY "Allow Service Role" ON public.purchases FOR ALL USING (auth.role() = 'service_role') WITH CHECK (auth.role() = 'service_role');
 
 -- 7. FRIENDS TABLE
 CREATE TABLE IF NOT EXISTS public.friends (
@@ -100,8 +109,11 @@ CREATE TABLE IF NOT EXISTS public.lobby_queue (
 ALTER TABLE public.friends ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.lobby_queue ENABLE ROW LEVEL SECURITY;
 
-CREATE POLICY "Allow Service Role" ON public.friends FOR ALL USING (true) WITH CHECK (true);
-CREATE POLICY "Allow Service Role" ON public.lobby_queue FOR ALL USING (true) WITH CHECK (true);
+DROP POLICY IF EXISTS "Allow Service Role" ON public.friends;
+DROP POLICY IF EXISTS "Allow Service Role" ON public.lobby_queue;
+
+CREATE POLICY "Allow Service Role" ON public.friends FOR ALL USING (auth.role() = 'service_role') WITH CHECK (auth.role() = 'service_role');
+CREATE POLICY "Allow Service Role" ON public.lobby_queue FOR ALL USING (auth.role() = 'service_role') WITH CHECK (auth.role() = 'service_role');
 
 -- 9. GAME SAVES TABLE
 CREATE TABLE IF NOT EXISTS public.game_saves (
@@ -111,4 +123,64 @@ CREATE TABLE IF NOT EXISTS public.game_saves (
 );
 
 ALTER TABLE public.game_saves ENABLE ROW LEVEL SECURITY;
-CREATE POLICY "Allow Service Role" ON public.game_saves FOR ALL USING (true) WITH CHECK (true);
+DROP POLICY IF EXISTS "Allow Service Role" ON public.game_saves;
+CREATE POLICY "Allow Service Role" ON public.game_saves FOR ALL USING (auth.role() = 'service_role') WITH CHECK (auth.role() = 'service_role');
+
+-- 10. INITIAL STORE ITEMS
+INSERT INTO public.store_items (name, type, price)
+SELECT 'Altın Piyon Kutusu', 'Kutu', 1500
+WHERE NOT EXISTS (SELECT 1 FROM public.store_items WHERE name = 'Altın Piyon Kutusu');
+
+INSERT INTO public.store_items (name, type, price)
+SELECT 'Efsanevi Stadyum Teması', 'Tema', 5000
+WHERE NOT EXISTS (SELECT 1 FROM public.store_items WHERE name = 'Efsanevi Stadyum Teması');
+
+INSERT INTO public.store_items (name, type, price)
+SELECT 'Elmas Zar Görünümü', 'Zar', 3000
+WHERE NOT EXISTS (SELECT 1 FROM public.store_items WHERE name = 'Elmas Zar Görünümü');
+
+INSERT INTO public.store_items (name, type, price)
+SELECT 'VIP Oyuncu Rozeti', 'Rozet', 10000
+WHERE NOT EXISTS (SELECT 1 FROM public.store_items WHERE name = 'VIP Oyuncu Rozeti');
+-- 11. MULTIPLAYER GAME SESSIONS
+CREATE TABLE IF NOT EXISTS public.game_sessions (
+    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    host_user_id UUID REFERENCES public.users(id) ON DELETE SET NULL,
+    status TEXT DEFAULT 'waiting',
+    mode TEXT DEFAULT 'private',
+    state_data JSONB DEFAULT '{}'::jsonb,
+    result_data JSONB DEFAULT '{}'::jsonb,
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+    updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+);
+
+CREATE TABLE IF NOT EXISTS public.game_session_players (
+    session_id UUID REFERENCES public.game_sessions(id) ON DELETE CASCADE,
+    user_id UUID REFERENCES public.users(id) ON DELETE CASCADE,
+    role TEXT DEFAULT 'guest',
+    joined_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+    PRIMARY KEY (session_id, user_id)
+);
+
+CREATE TABLE IF NOT EXISTS public.game_session_events (
+    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    session_id UUID REFERENCES public.game_sessions(id) ON DELETE CASCADE,
+    user_id UUID REFERENCES public.users(id) ON DELETE SET NULL,
+    event_type TEXT NOT NULL,
+    payload JSONB DEFAULT '{}'::jsonb,
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+);
+
+ALTER TABLE public.lobby_queue ADD COLUMN IF NOT EXISTS session_id UUID REFERENCES public.game_sessions(id) ON DELETE SET NULL;
+ALTER TABLE public.game_sessions ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.game_session_players ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.game_session_events ENABLE ROW LEVEL SECURITY;
+
+DROP POLICY IF EXISTS "Allow Service Role" ON public.game_sessions;
+DROP POLICY IF EXISTS "Allow Service Role" ON public.game_session_players;
+DROP POLICY IF EXISTS "Allow Service Role" ON public.game_session_events;
+
+CREATE POLICY "Allow Service Role" ON public.game_sessions FOR ALL USING (auth.role() = 'service_role') WITH CHECK (auth.role() = 'service_role');
+CREATE POLICY "Allow Service Role" ON public.game_session_players FOR ALL USING (auth.role() = 'service_role') WITH CHECK (auth.role() = 'service_role');
+CREATE POLICY "Allow Service Role" ON public.game_session_events FOR ALL USING (auth.role() = 'service_role') WITH CHECK (auth.role() = 'service_role');
+

@@ -7,7 +7,7 @@ import { PLAYERS, currentPlayer, setTutorialText } from './state.js';
 import { boardCells, buildBoard } from './board.js';
 import { addLog, showNotif, updateTutorialHUD } from '../ui/panel.js';
 import { closeModal, openCityModal } from '../ui/modal.js';
-import { renderPlayers } from './player.js';
+import { renderPlayers, syncMultiplayerState } from './player.js';
 import { renderPanel } from '../ui/panel.js';
 import { updateStadiums3D } from '../3d/stadiums.js';
 import gameService from '../../services/GameService.js';
@@ -42,6 +42,9 @@ export function buyCity(cIdx) {
   if (allOwned) {
     gameService.achievement.unlock('FULL_GROUP');
   }
+
+  // Multiplayer: Şehir satın alma sonrası sync
+  syncMultiplayerState('buy_city');
 }
 
 // Stadyum yap
@@ -69,6 +72,9 @@ export function upgradeStadium(cIdx) {
   if (p.stadiums[cIdx] === 3) {
     gameService.achievement.unlock('MAX_STADIUM');
   }
+
+  // Multiplayer: Stadyum yükseltme sonrası sync
+  syncMultiplayerState('upgrade_stadium');
 }
 
 // Kutu açma
@@ -111,6 +117,9 @@ export function openLootBox() {
   if (r.val === 200000) {
     gameService.achievement.unlock('GOLD_LOOT');
   }
+
+  // Multiplayer: Sürpriz kutu açma sonrası sync
+  syncMultiplayerState('open_lootbox');
 }
 
 export function closeLoot() {

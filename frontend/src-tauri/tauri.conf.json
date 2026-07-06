@@ -12,13 +12,13 @@
   },
   "tauri": {
     "allowlist": {
-      "all": true,
+      "all": false,
       "fs": {
-        "all": true,
+        "all": false,
         "scope": ["$APPCONFIG/*", "$APPDATA/*", "$CACHE/*", "$TEMP/*"]
       },
       "window": {
-        "all": true
+        "all": false
       }
     },
     "bundle": {
@@ -34,7 +34,7 @@
       ]
     },
     "security": {
-      "csp": null
+      "csp": "default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; media-src 'self' blob:; connect-src 'self' http://localhost:8000 https: ws: wss:"
     },
     "windows": [
       {

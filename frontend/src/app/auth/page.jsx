@@ -44,6 +44,17 @@ export default function AuthPage() {
     }
     const savedLang = localStorage.getItem('ft26_language') || 'Türkçe';
     setLanguage(savedLang);
+
+    // URL'den resetToken query parametresini oku
+    // E-postadaki şifre sıfırlama linkinden gelince direkt form açılır
+    const params = new URLSearchParams(window.location.search);
+    const tokenFromUrl = params.get('resetToken');
+    if (tokenFromUrl) {
+      setResetToken(tokenFromUrl);
+      setResetStep(2);
+      setActiveTab('reset');
+    }
+
     setMounted(true);
   }, []);
 
@@ -107,8 +118,16 @@ export default function AuthPage() {
       setError('');
       const res = await apiService.forgotPassword(username, email);
       if (res && res.resetToken) {
+        // Dev modu: Token doğrudan döner, şifre sıfırlama formuna geç
         setResetToken(res.resetToken);
         setResetStep(2);
+      } else if (res && res.emailSent) {
+        // Prod modu: E-posta gönderildi, kullanıcıya bilgi ver
+        setSuccessMessage(
+          language === 'English'
+            ? 'A password reset link has been sent to your email. Please check your inbox.'
+            : 'Şifre sıfırlama bağlantısı e-posta adresinize gönderildi. Lütfen mail kutunuzu kontrol edin.'
+        );
       } else {
         setError(res?.error || (language === 'English' ? 'Verification failed.' : 'Doğrulama başarısız.'));
       }
@@ -387,3 +406,4 @@ export default function AuthPage() {
     </div>
   );
 }
+
