@@ -133,36 +133,63 @@ export default function Page() {
                                       item.type === 'Zar' || item.type === 'Dice' ? t.store_item_dice :
                                       item.type === 'Rozet' || item.type === 'Badge' ? t.store_item_badge : item.type;
                 
+                const getItemImage = (name) => {
+                  if (!name) return null;
+                  const n = name.toLowerCase();
+                  if (n.includes('piyon') || n.includes('pawn') || n.includes('kutu') || n.includes('box')) return '/assets/store_gold_pawn_box.png';
+                  if (n.includes('stadyum') || n.includes('stadium') || n.includes('tema') || n.includes('theme')) return '/assets/store_stadium_theme.png';
+                  if (n.includes('zar') || n.includes('dice') || n.includes('elmas') || n.includes('diamond')) return '/assets/store_diamond_dice.png';
+                  if (n.includes('vip') || n.includes('rozet') || n.includes('badge')) return '/assets/store_vip_badge.png';
+                  return null;
+                };
+                const imgUrl = getItemImage(item.name);
+
                 return (
                   <div key={item.id} className="store-item-card" style={{
-                    background: 'rgba(20, 24, 33, 0.85)',
-                    border: '1px solid rgba(255, 255, 255, 0.1)',
-                    borderRadius: '8px',
-                    padding: '16px',
+                    background: 'linear-gradient(145deg, rgba(20, 24, 33, 0.95) 0%, rgba(10, 12, 17, 0.95) 100%)',
+                    border: '1px solid rgba(41, 182, 246, 0.25)',
+                    borderRadius: '12px',
+                    padding: '20px 16px',
                     display: 'flex',
                     flexDirection: 'column',
-                    justifyContent: 'between',
+                    justifyContent: 'space-between',
                     alignItems: 'center',
                     color: '#fff',
-                    boxShadow: '0 4px 15px rgba(0,0,0,0.3)',
+                    boxShadow: '0 8px 25px rgba(0,0,0,0.4)',
                     transition: 'transform 0.2s',
                   }}>
-                    <div style={{fontSize: '36px', marginBottom: '12px'}}>
-                      {item.type === 'Kutu' || item.type === 'Box' ? '📦' : item.type === 'Tema' || item.type === 'Theme' ? '🏟️' : item.type === 'Zar' || item.type === 'Dice' ? '🎲' : '🏅'}
-                    </div>
-                    <h3 style={{fontSize: '16px', fontWeight: 'bold', margin: '4px 0', textAlign: 'center'}}>{item.name}</h3>
+                    {imgUrl ? (
+                      <div style={{
+                        width: '100px',
+                        height: '100px',
+                        borderRadius: '12px',
+                        overflow: 'hidden',
+                        marginBottom: '12px',
+                        border: '1px solid rgba(41, 182, 246, 0.3)',
+                        boxShadow: '0 0 20px rgba(41, 182, 246, 0.2)',
+                        background: '#0d1117'
+                      }}>
+                        <img src={imgUrl} alt={item.name} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                      </div>
+                    ) : (
+                      <div style={{fontSize: '44px', marginBottom: '12px'}}>
+                        {item.type === 'Kutu' || item.type === 'Box' ? '📦' : item.type === 'Tema' || item.type === 'Theme' ? '🏟️' : item.type === 'Zar' || item.type === 'Dice' ? '🎲' : '🏅'}
+                      </div>
+                    )}
+                    <h3 style={{fontSize: '16px', fontWeight: 'bold', margin: '4px 0', textAlign: 'center', color: '#00e5ff'}}>{item.name}</h3>
                     <span style={{
                       fontSize: '11px', 
-                      background: 'rgba(255,255,255,0.1)', 
-                      padding: '2px 8px', 
+                      background: 'rgba(255,255,255,0.06)', 
+                      border: '1px solid rgba(255,255,255,0.1)',
+                      padding: '2px 10px', 
                       borderRadius: '12px',
-                      marginBottom: '16px',
+                      marginBottom: '14px',
                       color: '#aaa'
                     }}>{localizedType.toUpperCase()}</span>
                     
                     <div style={{display: 'flex', alignItems: 'center', gap: '6px', marginBottom: '16px'}}>
                       <span style={{fontSize: '18px'}}>🪙</span>
-                      <span style={{fontSize: '16px', fontWeight: 'bold'}}>₺{item.price.toLocaleString()}</span>
+                      <span style={{fontSize: '16px', fontWeight: 'bold', color: '#ffb74d'}}>₺{item.price.toLocaleString()}</span>
                     </div>
 
                     <button 

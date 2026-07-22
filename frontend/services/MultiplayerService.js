@@ -9,6 +9,7 @@ class MultiplayerService {
     this._applyingRemoteState = false;
     this._onState = null;
     this._version = null;
+    this._localPlayerIndex = null;
     this._reconnectAttempts = 0;
     this._reconnectTimeout = null;
   }
@@ -25,13 +26,18 @@ class MultiplayerService {
     this._applyingRemoteState = value;
   }
 
-  async start(sessionId, onState) {
+  async start(sessionId, onState, localPlayerIndex) {
     this.stop();
     this._sessionId = sessionId;
     this._onState = onState;
+    this._localPlayerIndex = Number.isInteger(localPlayerIndex) ? localPlayerIndex : null;
     this._reconnectAttempts = 0;
 
     await this._connect();
+  }
+
+  canControlTurn(currentPlayerIndex) {
+    return !this._sessionId || this._localPlayerIndex === currentPlayerIndex;
   }
 
   async _connect() {
@@ -100,6 +106,7 @@ class MultiplayerService {
     this._sessionId = null;
     this._onState = null;
     this._version = null;
+    this._localPlayerIndex = null;
     this._reconnectAttempts = 0;
     this._applyingRemoteState = false;
   }

@@ -1,5 +1,5 @@
 'use client';
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useRef } from 'react';
 import apiService from '../../services/ApiService.js';
 import '../../css/style.css';
 import tr from '../locales/tr.json';
@@ -8,10 +8,128 @@ import en from '../locales/en.json';
 export default function App() {
   const [isLoggedIn, setIsLoggedIn] = useState(false);
   const [user, setUser] = useState(null);
-  const [stats, setStats] = useState({ total_earnings: 2000, wins: 0 });
   const [friends, setFriends] = useState([]);
-  const [loadingClass, setLoadingClass] = useState('loading-transition-overlay');
+  const [stats, setStats] = useState({ total_earnings: 0, highest_money: 0, total_properties: 0, wins: 0, total_turns: 0, xp: 0 });
   const [language, setLanguage] = useState('Türkçe');
+  const [mounted, setMounted] = useState(false);
+  const [loadingClass, setLoadingClass] = useState('loading-transition-overlay');
+  const [gameReady, setGameReady] = useState(false);
+  const [invitedFriends, setInvitedFriends] = useState([]);
+  const [friendSearchInput, setFriendSearchInput] = useState('');
+  const [friendAddLoading, setFriendAddLoading] = useState(false);
+
+  // Sol Alt Canlı Sohbet State'leri (Referans Görsel Birebir Tasarımı)
+  const [chatMessages, setChatMessages] = useState([
+    { id: 1, sender: 'Sistem', channel: 'Grup', text: 'Lobiye bağlandınız. Keyifli oyunlar!', time: '14:30' },
+    { id: 2, sender: 'GeneralBAL', channel: 'Grup', text: 'Selamlar herkese, maça hazır mısınız?', time: '14:32' }
+  ]);
+  const [chatChannel, setChatChannel] = useState('Grup'); // 'Grup' veya 'Kime'
+  const [chatTarget, setChatTarget] = useState('');
+  const [chatTargetInput, setChatTargetInput] = useState('');
+  const [chatText, setChatText] = useState('');
+  const [showChatLog, setShowChatLog] = useState(false);
+  const chatLogRef = useRef(null);
+
+  const availableFriends = ['GeneralBAL', 'Gangant', 'Atakum Sahil', 'fatihjojo55', 'FATİHOCAM', 'husnucoban', 'Majste', 'melankoli tepesi', 'Messisel', 'SIUUU'];
+  const allFriendsList = [...new Set([...availableFriends, ...friends.map(f => f.username)])];
+
+  const matchingFriends = chatTargetInput.trim() 
+    ? allFriendsList.filter(f => f.toLowerCase().startsWith(chatTargetInput.toLowerCase()))
+    : allFriendsList;
+
+  const handleSendChatMessage = (e) => {
+    if (e) e.preventDefault();
+    if (!chatText.trim()) return;
+
+    if (chatChannel === 'Kime') {
+      if (!chatTarget) {
+        alert('Lütfen mesaj gönderilecek arkadaşınızı seçin!');
+        return;
+      }
+    }
+
+    const now = new Date();
+    const timeStr = `${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`;
+    const senderName = user?.username || 'Siz';
+
+    const newMessage = {
+      id: Date.now(),
+      sender: senderName,
+      channel: chatChannel,
+      target: chatChannel === 'Kime' ? chatTarget : null,
+      text: chatText.trim(),
+      time: timeStr
+    };
+
+    setChatMessages(prev => [...prev, newMessage]);
+    setChatText('');
+    setShowChatLog(true);
+
+    setTimeout(() => {
+      if (chatLogRef.current) {
+        chatLogRef.current.scrollTop = chatLogRef.current.scrollHeight;
+      }
+    }, 50);
+  };
+
+  const openPrivateChat = (friendName) => {
+    if (!allFriendsList.includes(friendName)) {
+      alert(`"${friendName}" ile özel sohbet başlatabilmek için öncelikle arkadaş eklemelisiniz!`);
+      return;
+    }
+    setChatChannel('Kime');
+    setChatTarget(friendName);
+    setChatTargetInput('');
+    setShowChatLog(true);
+  };
+
+  const handleAddFriend = async () => {
+    const username = friendSearchInput.trim();
+    if (!username) {
+      alert('Lütfen eklenecek kullanıcı adını girin!');
+      return;
+    }
+
+    if (!isLoggedIn) {
+      alert('Arkadaş eklemek için lütfen önce giriş yapın!');
+      return;
+    }
+
+    try {
+      setFriendAddLoading(true);
+      const res = await apiService.addFriend(username);
+      if (res && res.error) {
+        alert(`Arkadaş ekleme hatası: ${res.error}`);
+      } else {
+        alert(`"${username}" kullanıcısına arkadaşlık isteği gönderildi! 📩`);
+        setFriendSearchInput('');
+      }
+    } catch (e) {
+      alert(`"${username}" adlı kullanıcı bulunamadı veya istek gönderilemedi.`);
+    } finally {
+      setFriendAddLoading(false);
+    }
+  };
+
+  const sendGameInvite = (friendName) => {
+    if (invitedFriends.includes(friendName)) {
+      alert(`${friendName} kullanıcısına zaten davet gönderildi!`);
+      return;
+    }
+    if (invitedFriends.length >= 3) {
+      alert('Grup dolu (maksimum 4 kişi)!');
+      return;
+    }
+    setInvitedFriends(prev => [...prev, friendName]);
+    alert(`${friendName} kullanıcısına oyun daveti gönderildi! 📩`);
+
+    setTimeout(() => {
+      const lobbyTabBtn = document.querySelectorAll('.social-tab')[0];
+      if (window.switchSocialTab && lobbyTabBtn) {
+        window.switchSocialTab('lobby', lobbyTabBtn);
+      }
+    }, 400);
+  };
 
   useEffect(() => {
     // 1. Client-side durumları hemen yükle (Dil ve giriş durumu)
@@ -223,7 +341,7 @@ export default function App() {
               justifyContent: 'center',
               overflow: 'hidden'
             }} title={`${user?.username} (Siz)`}>
-              {user?.avatar && user.avatar.startsWith('/') ? (
+              {user?.avatar && (user.avatar.startsWith('/') || user.avatar.startsWith('data:') || user.avatar.startsWith('http')) ? (
                 <img src={user.avatar} alt="pp" style={{width: '100%', height: '100%', objectFit: 'cover'}} />
               ) : (
                 user?.avatar || '🐐'
@@ -260,7 +378,7 @@ export default function App() {
                     justifyContent: 'center',
                     overflow: 'hidden'
                   }}>
-                    {user?.avatar && user.avatar.startsWith('/') ? (
+                    {user?.avatar && (user.avatar.startsWith('/') || user.avatar.startsWith('data:') || user.avatar.startsWith('http')) ? (
                       <img src={user.avatar} alt="pp" style={{width: '100%', height: '100%', objectFit: 'cover'}} />
                     ) : (
                       user?.avatar || '🐐'
@@ -271,15 +389,58 @@ export default function App() {
                     <div className="player-status-mini">Grup Lideri</div>
                   </div>
                 </div>
-                {[1, 2, 3].map(i => (
-                  <div key={i} className="lobby-player-row empty">
-                    <div className="player-avatar-mini">+</div>
-                    <div className="player-info-mini">
-                      <div className="player-name-mini">Boş Yuva</div>
-                      <div className="player-status-mini">Davet Et</div>
+                {[0, 1, 2].map((idx) => {
+                  const invitedName = invitedFriends[idx];
+                  if (invitedName) {
+                    return (
+                      <div key={idx} className="lobby-player-row active" style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', paddingRight: '10px' }}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                          <div className="player-avatar-mini" style={{ backgroundColor: '#ffb74d', color: '#000', fontWeight: 'bold' }}>
+                            {invitedName[0]?.toUpperCase()}
+                          </div>
+                          <div className="player-info-mini">
+                            <div className="player-name-mini">{invitedName}</div>
+                            <div className="player-status-mini" style={{ color: '#ffb74d', fontWeight: 'bold' }}>Davet Edildi ⏳</div>
+                          </div>
+                        </div>
+                        <button 
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            setInvitedFriends(prev => prev.filter(n => n !== invitedName));
+                          }}
+                          style={{ background: 'transparent', border: 'none', color: '#ff5252', cursor: 'pointer', fontSize: '14px', fontWeight: 'bold' }}
+                          title="Daveti İptal Et"
+                        >
+                          ✕
+                        </button>
+                      </div>
+                    );
+                  }
+
+                  return (
+                    <div 
+                      key={idx} 
+                      className="lobby-player-row empty"
+                      style={{ cursor: 'pointer' }}
+                      onClick={() => {
+                        const panel = document.getElementById('social-panel');
+                        if (panel && panel.classList.contains('collapsed')) {
+                          if (window.toggleSocialPanel) window.toggleSocialPanel();
+                        }
+                        const friendsTabBtn = document.querySelectorAll('.social-tab')[1];
+                        if (window.switchSocialTab && friendsTabBtn) {
+                          window.switchSocialTab('friends', friendsTabBtn);
+                        }
+                      }}
+                    >
+                      <div className="player-avatar-mini">+</div>
+                      <div className="player-info-mini">
+                        <div className="player-name-mini">Boş Yuva</div>
+                        <div className="player-status-mini">Davet Et</div>
+                      </div>
                     </div>
-                  </div>
-                ))}
+                  );
+                })}
               </>
             ) : (
               <div style={{ padding: '20px 10px', fontSize: '13px', color: '#aaa', textAlign: 'center' }}>
@@ -291,8 +452,33 @@ export default function App() {
 
         {/* 2. ARKADAŞLAR SEKME İÇERİĞİ */}
         <div id="social-friends-content" className="social-tab-content">
-          <div className="friends-search">
-            <input type="text" placeholder="İSİM#ETİKET" className="search-input-field" />
+          <div className="friends-search" style={{ display: 'flex', gap: '6px', alignItems: 'center' }}>
+            <input 
+              type="text" 
+              placeholder="Kullanıcı adı girin..." 
+              className="search-input-field" 
+              value={friendSearchInput}
+              onChange={(e) => setFriendSearchInput(e.target.value)}
+              onKeyDown={(e) => { if (e.key === 'Enter') handleAddFriend(); }}
+              style={{ flex: 1 }}
+            />
+            <button 
+              onClick={handleAddFriend}
+              disabled={friendAddLoading}
+              style={{
+                background: 'linear-gradient(135deg, #00e5ff, #0288d1)',
+                border: 'none',
+                color: '#000',
+                padding: '8px 12px',
+                borderRadius: '6px',
+                fontWeight: '800',
+                fontSize: '12px',
+                cursor: 'pointer',
+                whiteSpace: 'nowrap'
+              }}
+            >
+              {friendAddLoading ? '...' : '+ Ekle'}
+            </button>
           </div>
 
           <div className="friends-list-wrapper">
@@ -305,6 +491,22 @@ export default function App() {
                 <div className="friend-name">GeneralBAL</div>
                 <div className="friend-status">Çevrimiçi</div>
               </div>
+              <button 
+                onClick={() => sendGameInvite('GeneralBAL')}
+                style={{
+                  background: invitedFriends.includes('GeneralBAL') ? 'rgba(255, 183, 77, 0.2)' : 'linear-gradient(135deg, #00e5ff, #0288d1)',
+                  border: invitedFriends.includes('GeneralBAL') ? '1px solid #ffb74d' : 'none',
+                  color: invitedFriends.includes('GeneralBAL') ? '#ffb74d' : '#000',
+                  padding: '4px 10px',
+                  borderRadius: '12px',
+                  fontSize: '11px',
+                  fontWeight: '800',
+                  cursor: 'pointer',
+                  marginLeft: 'auto'
+                }}
+              >
+                {invitedFriends.includes('GeneralBAL') ? 'Davet Edildi' : 'Davet Et'}
+              </button>
             </div>
 
             {/* Çevrimdışı Akordeon Başlığı */}
@@ -315,78 +517,39 @@ export default function App() {
 
             {/* Çevrimdışı Arkadaşlar Listesi */}
             <div id="offline-friends-list" className="offline-friends-list open">
-              <div className="friend-row offline">
-                <div className="friend-avatar">G</div>
-                <div className="friend-info">
-                  <div className="friend-name">Gangant</div>
-                  <div className="friend-status">Çevrimdışı</div>
+              {['Gangant', 'Atakum Sahil', 'fatihjojo55', 'FATİHOCAM', 'husnucoban', 'Majste', 'melankoli tepesi', 'Messisel', 'SIUUU'].map((fname, fIndex) => (
+                <div key={fIndex} className="friend-row offline">
+                  <div className="friend-avatar">{fname[0].toUpperCase()}</div>
+                  <div className="friend-info">
+                    <div className="friend-name">{fname}</div>
+                    <div className="friend-status">Çevrimdışı</div>
+                  </div>
+                  <div style={{ display: 'flex', gap: '6px', alignItems: 'center', marginLeft: 'auto' }}>
+                    <button 
+                      onClick={() => sendGameInvite(fname)}
+                      style={{
+                        background: invitedFriends.includes(fname) ? 'rgba(255, 183, 77, 0.2)' : 'rgba(41, 182, 246, 0.15)',
+                        border: invitedFriends.includes(fname) ? '1px solid #ffb74d' : '1px solid rgba(41, 182, 246, 0.3)',
+                        color: invitedFriends.includes(fname) ? '#ffb74d' : '#00e5ff',
+                        padding: '4px 8px',
+                        borderRadius: '10px',
+                        fontSize: '10px',
+                        fontWeight: '700',
+                        cursor: 'pointer'
+                      }}
+                    >
+                      {invitedFriends.includes(fname) ? 'Davet Edildi' : 'Davet Et'}
+                    </button>
+                    <span 
+                      onClick={(e) => { e.stopPropagation(); openPrivateChat(fname); }}
+                      style={{ cursor: 'pointer', fontSize: '13px', padding: '2px 4px', borderRadius: '4px', background: 'rgba(255,255,255,0.05)' }} 
+                      title={`${fname} ile Özel Sohbet Başlat`}
+                    >
+                      💬
+                    </span>
+                  </div>
                 </div>
-                <span className="chat-bubble-icon">💬</span>
-              </div>
-              <div className="friend-row offline">
-                <div className="friend-avatar">A</div>
-                <div className="friend-info">
-                  <div className="friend-name">Atakum Sahil</div>
-                  <div className="friend-status">Çevrimdışı</div>
-                </div>
-                <span className="chat-bubble-icon">💬</span>
-              </div>
-              <div className="friend-row offline">
-                <div className="friend-avatar">F</div>
-                <div className="friend-info">
-                  <div className="friend-name">fatihjojo55</div>
-                  <div className="friend-status">Çevrimdışı</div>
-                </div>
-                <span className="chat-bubble-icon">💬</span>
-              </div>
-              <div className="friend-row offline">
-                <div className="friend-avatar">F</div>
-                <div className="friend-info">
-                  <div className="friend-name">FATİHOCAM</div>
-                  <div className="friend-status">Çevrimdışı</div>
-                </div>
-                <span className="chat-bubble-icon">💬</span>
-              </div>
-              <div className="friend-row offline">
-                <div className="friend-avatar">H</div>
-                <div className="friend-info">
-                  <div className="friend-name">husnucoban</div>
-                  <div className="friend-status">Çevrimdışı</div>
-                </div>
-                <span className="chat-bubble-icon">💬</span>
-              </div>
-              <div className="friend-row offline">
-                <div className="friend-avatar">M</div>
-                <div className="friend-info">
-                  <div className="friend-name">Majste</div>
-                  <div className="friend-status">Çevrimdışı</div>
-                </div>
-                <span className="chat-bubble-icon">💬</span>
-              </div>
-              <div className="friend-row offline">
-                <div className="friend-avatar">M</div>
-                <div className="friend-info">
-                  <div className="friend-name">melankoli tepesi</div>
-                  <div className="friend-status">Çevrimdışı</div>
-                </div>
-                <span className="chat-bubble-icon">💬</span>
-              </div>
-              <div className="friend-row offline">
-                <div className="friend-avatar">M</div>
-                <div className="friend-info">
-                  <div className="friend-name">Messisel</div>
-                  <div className="friend-status">Çevrimdışı</div>
-                </div>
-                <span className="chat-bubble-icon">💬</span>
-              </div>
-              <div className="friend-row offline">
-                <div className="friend-avatar">S</div>
-                <div className="friend-info">
-                  <div className="friend-name">SIUUU</div>
-                  <div className="friend-status">Çevrimdışı</div>
-                </div>
-                <span className="chat-bubble-icon">💬</span>
-              </div>
+              ))}
             </div>
           </div>
         </div>
@@ -395,12 +558,200 @@ export default function App() {
       <button className="btn-lobby-exit" onClick={() => {window.closeApp()}}>OYUNDAN ÇIK</button>
     </div>
 
+    {/* Sol Alt Canlı Sohbet Barı (360px Genişlik & Sol Üst Kartlarla Hizalı 20px) */}
+    <div className="menu-left-chat" style={{
+      position: 'absolute',
+      left: '20px',
+      bottom: '30px',
+      zIndex: 100,
+      width: '360px',
+      maxWidth: '88%',
+      display: 'flex',
+      flexDirection: 'column',
+      gap: '4px',
+      background: 'transparent',
+      border: 'none',
+      boxShadow: 'none',
+      padding: 0
+    }}>
+      {/* Sohbet Geçmişi */}
+      {showChatLog && (
+        <div style={{
+          background: 'rgba(9, 11, 14, 0.95)',
+          border: '1px solid rgba(255, 255, 255, 0.12)',
+          borderRadius: '6px 6px 0 0',
+          padding: '8px 10px',
+          maxHeight: '125px',
+          width: '100%',
+          boxSizing: 'border-box',
+          overflowY: 'auto',
+          display: 'flex',
+          flexDirection: 'column',
+          gap: '4px',
+          boxShadow: '0 -6px 20px rgba(0,0,0,0.6)'
+        }} ref={chatLogRef}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderBottom: '1px solid rgba(255,255,255,0.08)', paddingBottom: '3px', marginBottom: '2px' }}>
+            <span style={{ fontSize: '10px', fontWeight: '800', color: chatChannel === 'Kime' ? '#e573a7' : '#00e5ff' }}>
+              💬 {chatChannel === 'Grup' ? 'GRUP SOHBETİ' : `ÖZEL: ${chatTarget || 'Alıcı Seçin'}`}
+            </span>
+            <button onClick={() => setShowChatLog(false)} style={{ background: 'transparent', border: 'none', color: '#888', cursor: 'pointer', fontSize: '11px' }}>✕</button>
+          </div>
 
+          {chatMessages
+            .filter(m => chatChannel === 'Grup' ? m.channel === 'Grup' : (m.channel === 'Kime' && (m.target === chatTarget || m.sender === chatTarget)))
+            .map(msg => (
+              <div key={msg.id} style={{ fontSize: '11px', lineHeight: '1.3' }}>
+                <span style={{ fontSize: '9px', color: '#666', marginRight: '4px' }}>[{msg.time}]</span>
+                <span style={{ fontWeight: '800', color: msg.sender === 'Sistem' ? '#ffb74d' : (msg.sender === (user?.username || 'Siz') ? '#e573a7' : '#00e5ff'), marginRight: '4px' }}>
+                  {msg.sender}:
+                </span>
+                <span style={{ color: '#eee' }}>{msg.text}</span>
+              </div>
+            ))}
+        </div>
+      )}
 
-    {/* Sol Alt Grup Sohbeti */}
-    <div className="menu-left-chat">
-      <div className="chat-prefix">Grup:</div>
-      <input type="text" className="chat-input" placeholder="Mesaj yazmak için tıklayın..." disabled />
+      {/* Referans Görsel Chat Input Barı */}
+      <div style={{ position: 'relative', width: '100%', boxSizing: 'border-box' }}>
+        {/* Autocomplete Popup */}
+        {chatChannel === 'Kime' && !chatTarget && matchingFriends.length > 0 && (
+          <div style={{
+            position: 'absolute',
+            bottom: '100%',
+            left: '0',
+            marginBottom: '2px',
+            display: 'flex',
+            flexDirection: 'column',
+            width: '120px',
+            boxShadow: '0 4px 12px rgba(0,0,0,0.6)',
+            zIndex: 110
+          }}>
+            {matchingFriends.slice(0, 3).map((fName, idx) => (
+              <div 
+                key={fName}
+                onClick={() => {
+                  setChatTarget(fName);
+                  setChatTargetInput('');
+                }}
+                style={{
+                  background: idx === 0 ? '#d4719e' : '#71717a',
+                  color: '#ffffff',
+                  padding: '4px 8px',
+                  fontSize: '11px',
+                  fontWeight: '600',
+                  fontFamily: "'Outfit', sans-serif",
+                  cursor: 'pointer'
+                }}
+              >
+                {fName}
+              </div>
+            ))}
+          </div>
+        )}
+
+        <form 
+          onSubmit={handleSendChatMessage}
+          style={{
+            background: 'rgba(9, 11, 14, 0.95)',
+            border: '1px solid rgba(255, 255, 255, 0.12)',
+            height: '28px',
+            display: 'flex',
+            alignItems: 'center',
+            padding: '0 8px',
+            boxShadow: '0 4px 15px rgba(0,0,0,0.4)',
+            width: '100%',
+            boxSizing: 'border-box'
+          }}
+        >
+          {/* Prefix Text */}
+          {chatChannel === 'Grup' ? (
+            <span 
+              onClick={() => { setChatChannel('Kime'); setChatTarget(''); }}
+              style={{ color: '#00e5ff', fontWeight: '700', fontSize: '13px', marginRight: '6px', cursor: 'pointer', userSelect: 'none' }}
+              title="Kanal Değiştir (Grup / Kime)"
+            >
+              Grup:
+            </span>
+          ) : chatTarget ? (
+            <span 
+              onClick={() => { setChatTarget(''); setChatTargetInput(''); }}
+              style={{ background: '#d4719e', color: '#fff', padding: '2px 6px', borderRadius: '2px', fontWeight: '700', fontSize: '12px', marginRight: '8px', cursor: 'pointer' }}
+              title="Alıcıyı Değiştir"
+            >
+              {chatTarget}
+            </span>
+          ) : (
+            <span 
+              onClick={() => setChatChannel('Grup')}
+              style={{ color: '#e573a7', fontWeight: '700', fontSize: '13px', marginRight: '6px', cursor: 'pointer', userSelect: 'none' }}
+              title="Grup Moduna Geç"
+            >
+              Kime:
+            </span>
+          )}
+
+          {/* Input Field */}
+          {chatChannel === 'Kime' && !chatTarget ? (
+            <div style={{ display: 'flex', alignItems: 'center', flex: 1 }}>
+              <input 
+                type="text"
+                value={chatTargetInput}
+                onChange={(e) => setChatTargetInput(e.target.value)}
+                onFocus={() => setShowChatLog(true)}
+                onKeyDown={(e) => {
+                  if (e.key === 'Tab' || e.key === 'Enter') {
+                    e.preventDefault();
+                    if (matchingFriends.length > 0) {
+                      setChatTarget(matchingFriends[0]);
+                      setChatTargetInput('');
+                    }
+                  }
+                }}
+                style={{
+                  background: 'transparent',
+                  border: 'none',
+                  outline: 'none',
+                  color: '#ffffff',
+                  fontSize: '13px',
+                  fontFamily: "'Outfit', sans-serif",
+                  width: `${Math.max(20, chatTargetInput.length * 9)}px`
+                }}
+                autoFocus
+              />
+              <span style={{ color: 'rgba(255, 255, 255, 0.4)', fontSize: '11px', marginLeft: '10px', userSelect: 'none', pointerEvents: 'none' }}>
+                Tamamlamak için: [TAB]
+              </span>
+            </div>
+          ) : (
+            <input 
+              type="text"
+              placeholder="Mesaj yazmak için tıklayın..."
+              value={chatText}
+              onChange={(e) => setChatText(e.target.value)}
+              onFocus={() => setShowChatLog(true)}
+              onKeyDown={(e) => {
+                if (e.key === 'Tab') {
+                  e.preventDefault();
+                  if (chatChannel === 'Grup') {
+                    setChatChannel('Kime');
+                  } else {
+                    setChatChannel('Grup');
+                  }
+                }
+              }}
+              style={{
+                flex: 1,
+                background: 'transparent',
+                border: 'none',
+                outline: 'none',
+                color: '#ffffff',
+                fontSize: '13px',
+                fontFamily: "'Outfit', sans-serif"
+              }}
+            />
+          )}
+        </form>
+      </div>
     </div>
   </div>
 

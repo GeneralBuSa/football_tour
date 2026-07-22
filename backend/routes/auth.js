@@ -14,6 +14,10 @@ function isStrongEnoughPassword(password) {
   return typeof password === 'string' && password.length >= 8;
 }
 
+function isValidUsername(username) {
+  return typeof username === 'string' && /^[A-Za-z0-9_]{3,24}$/.test(username);
+}
+
 function isResetRateLimited(key) {
   const now = Date.now();
   const windowMs = 15 * 60 * 1000;
@@ -28,6 +32,9 @@ function isResetRateLimited(key) {
 router.post('/register', async (req, res) => {
   const { username, email, password } = req.body;
   if (!username || !email || !password) return res.status(400).json({ error: 'Missing fields' });
+  if (!isValidUsername(username)) {
+    return res.status(400).json({ error: 'Kullanıcı adı 3-24 karakter olmalı; yalnızca harf, rakam ve alt çizgi içerebilir.' });
+  }
   if (!isStrongEnoughPassword(password)) {
     return res.status(400).json({ error: 'Şifre en az 8 karakter olmalıdır.' });
   }

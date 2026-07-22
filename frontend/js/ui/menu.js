@@ -6,6 +6,16 @@ import { renderPlayers } from '../engine/player.js';
 import { startTimer } from './settings.js';
 import apiService from '../../services/ApiService.js';
 
+function escapeHtml(value) {
+  return String(value ?? '').replace(/[&<>"']/g, char => ({
+    '&': '&amp;',
+    '<': '&lt;',
+    '>': '&gt;',
+    '"': '&quot;',
+    "'": '&#39;'
+  }[char]));
+}
+
 // Oyun başlatma — options.sessionId varsa multiplayer session başlatılır
 export function playLocalGame(options = {}) {
   resetState();
@@ -15,10 +25,20 @@ export function playLocalGame(options = {}) {
     // Çevrimiçi oyunda sadece 2 oyuncu (Host vs Guest) yer alır
     setPlayers(PLAYERS.slice(0, 2));
 
-    apiService.getMultiplayerSession(sessionId).then(session => {
+    Promise.all([
+      apiService.getMultiplayerSession(sessionId),
+      import('../../services/MultiplayerService.js'),
+      import('../engine/snapshot.js')
+    ]).then(([session, { default: multiplayerService }, { applyGameSnapshot }]) => {
       if (session && Array.isArray(session.game_session_players)) {
         const hostPlayer = session.game_session_players.find(p => p.role === 'host');
         const guestPlayer = session.game_session_players.find(p => p.role === 'guest');
+        const localUserId = apiService.getUser()?.id;
+        const localPlayerIndex = hostPlayer?.user_id === localUserId ? 0 : guestPlayer?.user_id === localUserId ? 1 : null;
+
+        if (localPlayerIndex === null) {
+          throw new Error('Oturumdaki oyuncu rolü belirlenemedi');
+        }
 
         if (hostPlayer && hostPlayer.users) {
           PLAYERS[0].name = hostPlayer.users.username;
@@ -33,21 +53,16 @@ export function playLocalGame(options = {}) {
           }
         }
         renderPlayers();
-      }
-    }).catch(e => console.warn('[Multiplayer] session oyuncuları yüklenemedi', e));
 
-    Promise.all([
-      import('../../services/MultiplayerService.js'),
-      import('../engine/snapshot.js')
-    ]).then(([{ default: multiplayerService }, { applyGameSnapshot }]) => {
-      multiplayerService.start(sessionId, (stateData) => {
-        multiplayerService.setApplyingRemoteState(true);
-        try {
-          applyGameSnapshot(stateData);
-        } finally {
-          multiplayerService.setApplyingRemoteState(false);
-        }
-      });
+        multiplayerService.start(sessionId, (stateData) => {
+          multiplayerService.setApplyingRemoteState(true);
+          try {
+            applyGameSnapshot(stateData);
+          } finally {
+            multiplayerService.setApplyingRemoteState(false);
+          }
+        }, localPlayerIndex);
+      }
     }).catch(e => console.warn('[Multiplayer] session başlatılamadı', e));
   }
 
@@ -116,7 +131,7 @@ export async function showOnlineLobby() {
         <div class="lobby-spinner"></div>
         <div class="lobby-sim-status" id="lobby-status">Sıraya giriliyor...</div>
         <div class="lobby-players-list" id="lobby-players">
-          <div class="lobby-player-row"><span>Siz (${apiService.getUser()?.username})</span><span style="color:#2ecc71">ARANIYOR</span></div>
+          <div class="lobby-player-row"><span>Siz (${escapeHtml(apiService.getUser()?.username)})</span><span style="color:#2ecc71">ARANIYOR</span></div>
         </div>
       </div>
       <div class="modal-btns">
@@ -155,7 +170,7 @@ export async function showOnlineLobby() {
         const playersEl = document.getElementById('lobby-players');
         const row = document.createElement('div');
         row.className = 'lobby-player-row';
-        row.innerHTML = `<span>${statusRes.matched_with} (Rakip)</span><span style="color:#2ecc71">HAZIR</span>`;
+        row.innerHTML = `<span>${escapeHtml(statusRes.matched_with)} (Rakip)</span><span style="color:#2ecc71">HAZIR</span>`;
         playersEl.appendChild(row);
 
         const spinner = document.querySelector('.lobby-spinner');
@@ -323,7 +338,7 @@ export async function loadFriendsUI() {
           <div class="friend-row" style="display: flex; justify-content: space-between; align-items: center; padding: 8px 10px; border-bottom: 1px solid rgba(255,255,255,0.05);">
             <div style="display: flex; align-items: center; gap: 8px;">
               <div class="friend-avatar" style="background: #ff7043; width: 24px; height: 24px; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 11px;">👤</div>
-              <div class="friend-name" style="font-size: 13px; color: #fff;">${f.username}</div>
+              <div class="friend-name" style="font-size: 13px; color: #fff;">${escapeHtml(f.username)}</div>
             </div>
             ${!f.is_sender ? `
               <button onclick="window.acceptFriendAction('${f.friend_id}')" class="mbtn mbtn-buy" style="padding: 4px 8px; margin: 0; font-size: 10px; height: auto;">Kabul Et</button>
@@ -344,7 +359,7 @@ export async function loadFriendsUI() {
           <div class="friend-row" style="display: flex; align-items: center; gap: 8px; padding: 8px 10px; border-bottom: 1px solid rgba(255,255,255,0.05);">
             <div class="friend-avatar" style="background: #2ecc71; width: 24px; height: 24px; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 11px;">👤</div>
             <div>
-              <div class="friend-name" style="font-size: 13px; color: #fff;">${f.username}</div>
+              <div class="friend-name" style="font-size: 13px; color: #fff;">${escapeHtml(f.username)}</div>
               <div class="friend-status" style="font-size: 10px; color: #aaa;">Çevrimdışı</div>
             </div>
           </div>
@@ -420,7 +435,7 @@ export async function createPrivateRoomAction() {
         <div style="text-align: center; margin: 15px 0;">
           <div style="font-size: 12px; color: #aaa;">Arkadaşınızın girmesi gereken Oda Kodu:</div>
           <div style="font-size: 24px; font-weight: bold; color: #29b6f6; letter-spacing: 2px; margin: 10px 0; background: rgba(41, 182, 246, 0.1); padding: 10px; border-radius: 6px; border: 1px dashed #29b6f6;">
-            ${myUsername}
+            ${escapeHtml(myUsername)}
           </div>
         </div>
         <div class="lobby-spinner"></div>

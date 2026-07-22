@@ -15,10 +15,15 @@ import { finishGameIfNeeded, renderPlayers, syncMultiplayerState } from './playe
 import { renderPanel } from '../ui/panel.js';
 import { openLootBox } from './economy.js';
 import gameService from '../../services/GameService.js';
+import multiplayerService from '../../services/MultiplayerService.js';
 
 // Zar atma
 export function rollDice() {
   if (diceRolled) return;
+  if (!multiplayerService.canControlTurn(currentPlayer)) {
+    showNotif('Bu tur rakibinizin. Hamle yapabilmek için sıranızı bekleyin.');
+    return;
+  }
 
   const rollBtn = document.getElementById('btn-roll');
   if (rollBtn) {

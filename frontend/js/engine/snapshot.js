@@ -8,6 +8,7 @@ import { openCityModal } from '../ui/modal.js';
 import { renderPanel, updateTutorialHUD } from '../ui/panel.js';
 import { renderPlayers } from './player.js';
 import { updateStadiums3D } from '../3d/stadiums.js';
+import multiplayerService from '../../services/MultiplayerService.js';
 
 export function getGameSnapshot() {
   return {
@@ -51,7 +52,7 @@ export function applyGameSnapshot(data) {
   const rollBtn = document.getElementById('btn-roll');
   const endBtn = document.getElementById('btn-end');
   if (rollBtn) {
-    rollBtn.disabled = false;
+    rollBtn.disabled = !multiplayerService.canControlTurn(data.currentPlayer || 0);
     rollBtn.style.display = '';
   }
   if (endBtn) endBtn.style.display = 'none';

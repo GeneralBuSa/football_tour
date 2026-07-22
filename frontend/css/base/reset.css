@@ -18,7 +18,7 @@
 }
 
 body {
-  font-family: 'Outfit', sans-serif;
+  font-family: var(--font-body), sans-serif;
   background: radial-gradient(circle at 50% 40%, var(--glow-radial) 0%, transparent 60%),
     linear-gradient(to bottom, var(--bg-top), var(--bg-mid), var(--bg-bot));
   min-height: 100vh;
@@ -26,6 +26,11 @@ body {
   color: #333;
   user-select: none;
   transition: background 0.5s ease;
+}
+
+h1, h2, h3, h4, h5, h6, button, .mbtn, .btn-mode-back {
+  font-family: var(--font-display), sans-serif;
+  letter-spacing: 0.5px;
 }
 
 /* Erişilebilirlik: Ekran okuyucu için gizli metin */

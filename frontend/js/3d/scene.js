@@ -50,9 +50,23 @@ export function update3DCamera() {
   camera.lookAt(0, 0, 0);
 }
 
+let lastRenderTime = 0;
+
 // Animasyon döngüsü
-export function animate3D() {
+export function animate3D(currentTime = performance.now()) {
   requestAnimationFrame(animate3D);
+
+  const settings = (typeof window !== 'undefined' && window.ft26_settings) || {};
+  let targetFps = settings.fpsLimit || 60;
+  if (settings.vSync === '1/2') targetFps = 30;
+
+  const frameInterval = 1000 / targetFps;
+  const elapsed = currentTime - (lastRenderTime || 0);
+
+  if (elapsed < frameInterval - 1) {
+    return;
+  }
+  lastRenderTime = currentTime - (elapsed % frameInterval);
 
   // Piyon hareketleri
   PLAYERS.forEach(p => {
@@ -84,8 +98,8 @@ export function animate3D() {
   for (let i = activeAnims.length - 1; i >= 0; i--) {
     const anim = activeAnims[i];
     const { group, targetScale, startTime } = anim;
-    const elapsed = (Date.now() - startTime) / 1000;
-    const t = Math.min(1, elapsed / 0.6);
+    const elapsedAnim = (Date.now() - startTime) / 1000;
+    const t = Math.min(1, elapsedAnim / 0.6);
     const spring = 1 - Math.pow(1 - t, 3) * Math.cos(t * Math.PI * 0.5);
     const scale = targetScale * spring;
     group.scale.set(scale, scale, scale);

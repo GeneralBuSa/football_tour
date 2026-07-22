@@ -108,13 +108,9 @@ router.put('/sessions/:sessionId/state', authenticate, async (req, res) => {
       return res.status(404).json({ error: 'Session not found' });
     }
 
-    // 2. Optimistic locking (İyimser kilitleme) kontrolü
-    if (version && session.updated_at) {
-      const clientTime = new Date(version).getTime();
-      const dbTime = new Date(session.updated_at).getTime();
-      if (clientTime < dbTime) {
-        return res.status(409).json({ error: 'Stale state update ignored', db_version: session.updated_at });
-      }
+    // 2. İlk state kurulumundan sonraki her yazma, son görülen sürümü taşımalıdır.
+    if (Object.keys(session.state_data || {}).length > 0 && !version) {
+      return res.status(409).json({ error: 'State version required', db_version: session.updated_at });
     }
 
     // 3. Katılımcıları ve rollerini bul
@@ -149,15 +145,23 @@ router.put('/sessions/:sessionId/state', authenticate, async (req, res) => {
       }
     }
 
-    // 5. Güncelleme işlemini yap
-    const { data, error } = await supabase
+    // 5. Güncelleme işlemini son görülen sürüme koşullandır. Böylece paralel
+    // istemcilerden yalnızca biri aynı state sürümünü güncelleyebilir.
+    let updateQuery = supabase
       .from('game_sessions')
       .update({ state_data, status: 'active', updated_at: new Date().toISOString() })
-      .eq('id', sessionId)
+      .eq('id', sessionId);
+
+    if (version) updateQuery = updateQuery.eq('updated_at', version);
+
+    const { data, error } = await updateQuery
       .select()
-      .single();
+      .maybeSingle();
 
     if (error) return res.status(400).json({ error: error.message });
+    if (!data) {
+      return res.status(409).json({ error: 'Stale state update ignored', db_version: session.updated_at });
+    }
 
     await supabase.from('game_session_events').insert([{
       session_id: sessionId,

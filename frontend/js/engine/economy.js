@@ -11,9 +11,14 @@ import { renderPlayers, syncMultiplayerState } from './player.js';
 import { renderPanel } from '../ui/panel.js';
 import { updateStadiums3D } from '../3d/stadiums.js';
 import gameService from '../../services/GameService.js';
+import multiplayerService from '../../services/MultiplayerService.js';
 
 // Şehir satın al
 export function buyCity(cIdx) {
+  if (!multiplayerService.canControlTurn(currentPlayer)) {
+    showNotif('Bu tur rakibinizin. Satın alma yapamazsınız.');
+    return;
+  }
   const c = CITIES[cIdx % CITIES.length];
   const p = PLAYERS[currentPlayer];
   if (p.money < c.price) return;
@@ -49,6 +54,10 @@ export function buyCity(cIdx) {
 
 // Stadyum yap
 export function upgradeStadium(cIdx) {
+  if (!multiplayerService.canControlTurn(currentPlayer)) {
+    showNotif('Bu tur rakibinizin. Stadyum yükseltemezsiniz.');
+    return;
+  }
   const c = CITIES[cIdx % CITIES.length];
   const p = PLAYERS[currentPlayer];
   const cost = Math.round(c.price * 0.4);
@@ -79,6 +88,10 @@ export function upgradeStadium(cIdx) {
 
 // Kutu açma
 export function openLootBox() {
+  if (!multiplayerService.canControlTurn(currentPlayer)) {
+    showNotif('Bu tur rakibinizin. Kutu açamazsınız.');
+    return;
+  }
   const rewards = [
     { icon: '💰', desc: 'Büyük para ödülü!', reward: '+₺120K', val: 120000, good: true },
     { icon: '⚽', desc: 'Gol attın!', reward: '+₺60K', val: 60000, good: true },

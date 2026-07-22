@@ -136,7 +136,6 @@ export default function SettingsPage() {
   const [graphicsQuality, setGraphicsQuality] = useState('Ultramodern');
   const [fpsLimit, setFpsLimit] = useState(60);
   const [vSync, setVSync] = useState('Kapat');
-
   // Genel & Oynanış Ayarları
   const [language, setLanguage] = useState('Türkçe');
   const [avatarsDisabled, setAvatarsDisabled] = useState(false);
@@ -144,6 +143,10 @@ export default function SettingsPage() {
   const [showPing, setShowPing] = useState(true);
   const [zoomBtnDisabled, setZoomBtnDisabled] = useState(false);
 
+  // Modal State'leri
+  const [showCreditsModal, setShowCreditsModal] = useState(false);
+  const [showPromoModal, setShowPromoModal] = useState(false);
+  const [promoCodeInput, setPromoCodeInput] = useState('');
 
   useEffect(() => {
     if (sessionLang) {
@@ -152,9 +155,44 @@ export default function SettingsPage() {
   }, [sessionLang]);
 
   useEffect(() => {
+    if (typeof window !== 'undefined') {
+      const saved = JSON.parse(localStorage.getItem('ft26_settings') || '{}');
+      if (saved.soundVolume !== undefined) setSoundVolume(saved.soundVolume);
+      if (saved.musicVolume !== undefined) setMusicVolume(saved.musicVolume);
+      if (saved.backgroundAudio !== undefined) setBackgroundAudio(saved.backgroundAudio);
+
+      if (saved.voiceChat !== undefined) setVoiceChat(saved.voiceChat);
+      if (saved.voiceVolume !== undefined) setVoiceVolume(saved.voiceVolume);
+      if (saved.voiceInputDevice !== undefined) setVoiceInputDevice(saved.voiceInputDevice);
+      if (saved.voiceInputMode !== undefined) setVoiceInputMode(saved.voiceInputMode);
+      if (saved.voiceSensitivity !== undefined) setVoiceSensitivity(saved.voiceSensitivity);
+
+      if (saved.fpsLimit !== undefined) setFpsLimit(saved.fpsLimit);
+      if (saved.vSync !== undefined) setVSync(saved.vSync);
+
+      if (saved.avatarsDisabled !== undefined) setAvatarsDisabled(saved.avatarsDisabled);
+      if (saved.emojisMuted !== undefined) setEmojisMuted(saved.emojisMuted);
+      if (saved.showPing !== undefined) setShowPing(saved.showPing);
+      if (saved.zoomBtnDisabled !== undefined) setZoomBtnDisabled(saved.zoomBtnDisabled);
+
+      window.ft26_settings = saved;
+    }
+  }, []);
+
+  useEffect(() => {
     if (!gameReady) return;
     setLoading(false);
   }, [gameReady]);
+
+  const updateSetting = (key, val, setter) => {
+    setter(val);
+    if (typeof window !== 'undefined') {
+      const current = JSON.parse(localStorage.getItem('ft26_settings') || '{}');
+      current[key] = val;
+      localStorage.setItem('ft26_settings', JSON.stringify(current));
+      window.ft26_settings = current;
+    }
+  };
 
   const handleLanguageChange = (newLang) => {
     setLanguage(newLang);
@@ -164,6 +202,12 @@ export default function SettingsPage() {
   const handleLogout = () => {
     apiService.logout();
     window.location.href = '/';
+  };
+
+  const handlePromoSubmit = () => {
+    if (!promoCodeInput.trim()) return;
+    alert(language === 'English' ? `Promo code "${promoCodeInput}" is invalid or expired.` : `"${promoCodeInput}" promosyon kodu geçersiz veya süresi dolmuş.`);
+    setPromoCodeInput('');
   };
 
   const showPromptPlaceholder = (title) => {
@@ -177,7 +221,7 @@ export default function SettingsPage() {
       <div className="settings-page-container" style={{display: 'flex', justifyContent: 'center'}}>
         <div className="menu-dynamic-screen" style={{width: '100%', maxWidth: '1150px'}}>
           <div className="dynamic-screen-header" style={{display: 'flex', alignItems: 'center', gap: '16px', borderBottom: '2px solid rgba(41, 182, 246, 0.3)'}}>
-            <button className="btn-mode-back" onClick={() => {window.location.href='/'}} style={{margin: '0', padding: '6px 12px', fontSize: '12px'}}>← {t.back}</button>
+            <button className="btn-mode-back" onClick={() => {window.location.href='/'}} style={{margin: '0', padding: '6px 14px', fontSize: '12px', background: 'linear-gradient(135deg, rgba(41, 182, 246, 0.2), rgba(2, 136, 209, 0.3))', border: '1px solid #29b6f6', color: '#29b6f6', borderRadius: '8px', fontWeight: 'bold'}}>{t.back}</button>
             <span style={{ textShadow: '0 0 10px rgba(41, 182, 246, 0.4)' }}>{t.settings}</span>
           </div>
           <div className="dynamic-screen-body" style={{marginTop: '20px'}}>
@@ -201,6 +245,33 @@ export default function SettingsPage() {
                   flexDirection: 'column',
                   gap: '24px'
                 }}>
+                  {/* PROMOSYON KODU ALANI */}
+                  <div>
+                    <button 
+                      onClick={() => setShowPromoModal(true)} 
+                      style={{
+                        width: '100%',
+                        padding: '14px',
+                        background: 'linear-gradient(135deg, #ffb74d 0%, #f57c00 100%)',
+                        color: '#000',
+                        border: 'none',
+                        borderRadius: '12px',
+                        fontWeight: '800',
+                        fontSize: '14px',
+                        cursor: 'pointer',
+                        boxShadow: '0 6px 20px rgba(255, 183, 77, 0.35)',
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        gap: '8px',
+                        transition: 'transform 0.2s',
+                        letterSpacing: '0.5px'
+                      }}
+                    >
+                      🎁 {language === 'English' ? 'Redeem Promo Code' : 'Promosyon Kodu Kullan'}
+                    </button>
+                  </div>
+
                   {/* DİL & GENEL SEÇENEKLER */}
                   <div>
                     <h3 style={{fontSize: '15px', fontWeight: '800', marginBottom: '14px', color: '#00e5ff', borderBottom: '1px solid rgba(255,255,255,0.08)', paddingBottom: '6px', letterSpacing: '0.5px'}}>{t.general_language}</h3>
@@ -212,22 +283,22 @@ export default function SettingsPage() {
                       
                       <div style={{display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: '13px'}}>
                         <span style={{color: '#8892b0'}}>{t.show_avatars}</span>
-                        <CustomCheckbox checked={!avatarsDisabled} onChange={() => setAvatarsDisabled(!avatarsDisabled)} />
+                        <CustomCheckbox checked={!avatarsDisabled} onChange={() => updateSetting('avatarsDisabled', !avatarsDisabled, setAvatarsDisabled)} />
                       </div>
 
                       <div style={{display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: '13px'}}>
                         <span style={{color: '#8892b0'}}>{t.mute_emojis}</span>
-                        <CustomCheckbox checked={emojisMuted} onChange={() => setEmojisMuted(!emojisMuted)} />
+                        <CustomCheckbox checked={emojisMuted} onChange={() => updateSetting('emojisMuted', !emojisMuted, setEmojisMuted)} />
                       </div>
 
                       <div style={{display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: '13px'}}>
                         <span style={{color: '#8892b0'}}>{t.show_ping}</span>
-                        <CustomCheckbox checked={showPing} onChange={() => setShowPing(!showPing)} />
+                        <CustomCheckbox checked={showPing} onChange={() => updateSetting('showPing', !showPing, setShowPing)} />
                       </div>
 
                       <div style={{display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: '13px'}}>
                         <span style={{color: '#8892b0'}}>{t.disable_zoom}</span>
-                        <CustomCheckbox checked={zoomBtnDisabled} onChange={() => setZoomBtnDisabled(!zoomBtnDisabled)} />
+                        <CustomCheckbox checked={zoomBtnDisabled} onChange={() => updateSetting('zoomBtnDisabled', !zoomBtnDisabled, setZoomBtnDisabled)} />
                       </div>
                     </div>
                   </div>
@@ -236,20 +307,40 @@ export default function SettingsPage() {
                   <div>
                     <h3 style={{fontSize: '15px', fontWeight: '800', marginBottom: '14px', color: '#00e5ff', borderBottom: '1px solid rgba(255,255,255,0.08)', paddingBottom: '6px', letterSpacing: '0.5px'}}>{t.video_screen}</h3>
                     <div style={{display: 'flex', flexDirection: 'column', gap: '14px'}}>
-                      <button className="mbtn mbtn-pass" onClick={() => {window.toggleFullscreen()}} style={{width: '100%', padding: '12px', borderRadius: '8px', fontSize: '13px', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px'}}>{t.fullscreen_btn}</button>
+                      <button 
+                        onClick={() => {window.toggleFullscreen()}} 
+                        style={{
+                          width: '100%', 
+                          padding: '12px', 
+                          borderRadius: '10px', 
+                          fontSize: '13px', 
+                          background: 'linear-gradient(135deg, #00e5ff 0%, #0288d1 100%)',
+                          color: '#000',
+                          border: 'none',
+                          fontWeight: '800',
+                          cursor: 'pointer',
+                          display: 'flex', 
+                          alignItems: 'center', 
+                          justifyContent: 'center',
+                          boxShadow: '0 4px 15px rgba(0, 229, 255, 0.3)',
+                          transition: 'all 0.2s'
+                        }}
+                      >
+                        {t.fullscreen_btn}
+                      </button>
                       
                       <div>
                         <div style={{fontSize: '12px', color: '#8892b0', marginBottom: '6px', fontWeight: 'bold'}}>{t.fps_limit}</div>
                         <div style={{display: 'flex', gap: '8px', background: 'rgba(0,0,0,0.3)', padding: '4px', borderRadius: '8px'}}>
                           {[30, 60, 120].map(f => (
-                            <button key={f} onClick={() => setFpsLimit(f)} style={{flex: 1, padding: '8px', background: fpsLimit === f ? '#00e5ff' : 'transparent', color: fpsLimit === f ? '#000' : '#8892b0', border: 'none', borderRadius: '6px', fontWeight: 'bold', fontSize: '11px', cursor: 'pointer'}}>{f} FPS</button>
+                            <button key={f} onClick={() => updateSetting('fpsLimit', f, setFpsLimit)} style={{flex: 1, padding: '8px', background: fpsLimit === f ? '#00e5ff' : 'transparent', color: fpsLimit === f ? '#000' : '#8892b0', border: 'none', borderRadius: '6px', fontWeight: 'bold', fontSize: '11px', cursor: 'pointer'}}>{f} FPS</button>
                           ))}
                         </div>
                       </div>
 
                       <div style={{display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: '13px'}}>
                         <span style={{color: '#8892b0'}}>{t.vsync}</span>
-                        <CustomDropdown value={vSync} onChange={setVSync} options={['Kapat', 'Aç', '1/2']} />
+                        <CustomDropdown value={vSync} onChange={(val) => updateSetting('vSync', val, setVSync)} options={['Kapat', 'Aç', '1/2']} />
                       </div>
                     </div>
                   </div>
@@ -299,7 +390,7 @@ export default function SettingsPage() {
                         <span style={{color: '#8892b0'}}>{t.sfx_volume}</span>
                         <span style={{color: '#00e5ff'}}>%{soundVolume}</span>
                       </div>
-                      <input type="range" min="0" max="100" value={soundVolume} onChange={(e) => setSoundVolume(e.target.value)} style={{width: '100%', accentColor: '#00e5ff', cursor: 'pointer'}} />
+                      <input type="range" min="0" max="100" value={soundVolume} onChange={(e) => updateSetting('soundVolume', Number(e.target.value), setSoundVolume)} style={{width: '100%', accentColor: '#00e5ff', cursor: 'pointer'}} />
                     </div>
                     
                     <div style={{marginBottom: '14px'}}>
@@ -307,12 +398,12 @@ export default function SettingsPage() {
                         <span style={{color: '#8892b0'}}>{t.music_volume}</span>
                         <span style={{color: '#00e5ff'}}>%{musicVolume}</span>
                       </div>
-                      <input type="range" min="0" max="100" value={musicVolume} onChange={(e) => setMusicVolume(e.target.value)} style={{width: '100%', accentColor: '#00e5ff', cursor: 'pointer'}} />
+                      <input type="range" min="0" max="100" value={musicVolume} onChange={(e) => updateSetting('musicVolume', Number(e.target.value), setMusicVolume)} style={{width: '100%', accentColor: '#00e5ff', cursor: 'pointer'}} />
                     </div>
 
                     <div style={{display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: '13px'}}>
                       <span style={{color: '#8892b0'}}>{t.bg_audio}</span>
-                      <CustomCheckbox checked={backgroundAudio} onChange={() => setBackgroundAudio(!backgroundAudio)} />
+                      <CustomCheckbox checked={backgroundAudio} onChange={() => updateSetting('backgroundAudio', !backgroundAudio, setBackgroundAudio)} />
                     </div>
                   </div>
 
@@ -320,7 +411,7 @@ export default function SettingsPage() {
                   <div>
                     <div style={{display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderBottom: '1px solid rgba(255,255,255,0.08)', paddingBottom: '6px', marginBottom: '16px'}}>
                       <h3 style={{fontSize: '15px', fontWeight: '800', color: '#00e5ff', letterSpacing: '0.5px', margin: '0'}}>{t.voice_chat}</h3>
-                      <CustomCheckbox checked={voiceChat} onChange={() => setVoiceChat(!voiceChat)} />
+                      <CustomCheckbox checked={voiceChat} onChange={() => updateSetting('voiceChat', !voiceChat, setVoiceChat)} />
                     </div>
 
                     {voiceChat && (
@@ -330,17 +421,17 @@ export default function SettingsPage() {
                             <span style={{color: '#8892b0'}}>{t.voice_volume}</span>
                             <span style={{color: '#00e5ff'}}>%{voiceVolume}</span>
                           </div>
-                          <input type="range" min="0" max="100" value={voiceVolume} onChange={(e) => setVoiceVolume(e.target.value)} style={{width: '100%', accentColor: '#00e5ff', cursor: 'pointer'}} />
+                          <input type="range" min="0" max="100" value={voiceVolume} onChange={(e) => updateSetting('voiceVolume', Number(e.target.value), setVoiceVolume)} style={{width: '100%', accentColor: '#00e5ff', cursor: 'pointer'}} />
                         </div>
 
                         <div style={{display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: '13px'}}>
                           <span style={{color: '#8892b0'}}>{t.input_device}</span>
-                          <CustomDropdown value={voiceInputDevice} onChange={setVoiceInputDevice} options={['Sistem Varsayılanı', 'Microphone Array (Digit...)', 'Harici Mikrofon']} />
+                          <CustomDropdown value={voiceInputDevice} onChange={(val) => updateSetting('voiceInputDevice', val, setVoiceInputDevice)} options={['Sistem Varsayılanı', 'Microphone Array (Digit...)', 'Harici Mikrofon']} />
                         </div>
 
                         <div style={{display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: '13px', marginTop: '12px'}}>
                           <span style={{color: '#8892b0'}}>{t.input_mode}</span>
-                          <CustomDropdown value={voiceInputMode} onChange={setVoiceInputMode} options={['Konuşmak için bas', 'Açık / Sürekli İletişim']} />
+                          <CustomDropdown value={voiceInputMode} onChange={(val) => updateSetting('voiceInputMode', val, setVoiceInputMode)} options={['Konuşmak için bas', 'Açık / Sürekli İletişim']} />
                         </div>
 
                         <div>
@@ -348,7 +439,7 @@ export default function SettingsPage() {
                             <span style={{color: '#8892b0'}}>{t.mic_sensitivity}</span>
                             <span style={{color: '#00e5ff'}}>%{voiceSensitivity}</span>
                           </div>
-                          <input type="range" min="0" max="100" value={voiceSensitivity} onChange={(e) => setVoiceSensitivity(e.target.value)} style={{width: '100%', accentColor: '#00e5ff', cursor: 'pointer'}} />
+                          <input type="range" min="0" max="100" value={voiceSensitivity} onChange={(e) => updateSetting('voiceSensitivity', Number(e.target.value), setVoiceSensitivity)} style={{width: '100%', accentColor: '#00e5ff', cursor: 'pointer'}} />
                         </div>
                       </div>
                     )}
@@ -366,18 +457,154 @@ export default function SettingsPage() {
               borderTop: '1px solid rgba(255,255,255,0.08)',
               paddingTop: '20px'
             }}>
-              <button className="mbtn mbtn-pass" onClick={() => showPromptPlaceholder("Gizlilik Politikası")} style={{margin: '0', padding: '12px', fontSize: '12px'}}>{t.privacy_policy}</button>
-              <button className="mbtn mbtn-pass" onClick={() => showPromptPlaceholder("Gizlilik Ayarları")} style={{margin: '0', padding: '12px', fontSize: '12px'}}>{t.privacy_settings}</button>
-              <button className="mbtn mbtn-pass" onClick={() => showPromptPlaceholder("Kullanım Koşulları")} style={{margin: '0', padding: '12px', fontSize: '12px'}}>{t.terms_of_service}</button>
-              <button className="mbtn mbtn-pass" onClick={() => showPromptPlaceholder("Kontroller")} style={{margin: '0', padding: '12px', fontSize: '12px'}}>{t.controls}</button>
-              <button className="mbtn mbtn-pass" onClick={() => showPromptPlaceholder("Oyun Kuralları")} style={{margin: '0', padding: '12px', fontSize: '12px'}}>{t.rules}</button>
-              <button className="mbtn mbtn-pass" onClick={() => showPromptPlaceholder("Hesap Bağlama")} style={{margin: '0', padding: '12px', fontSize: '12px'}}>{t.link_account}</button>
-              <button className="mbtn mbtn-pass" onClick={() => showPromptPlaceholder("Hata Raporu")} style={{margin: '0', padding: '12px', fontSize: '12px'}}>{t.send_doc}</button>
-              <button className="mbtn mbtn-upgrade" onClick={() => showPromptPlaceholder("Promosyon Kodu")} style={{margin: '0', padding: '12px', fontSize: '12px', color: '#000'}}>{t.promo_codes}</button>
+              <button 
+                onClick={() => showPromptPlaceholder("Gizlilik Politikası")} 
+                style={{
+                  margin: '0', 
+                  padding: '12px', 
+                  fontSize: '12px', 
+                  fontWeight: '700',
+                  borderRadius: '10px',
+                  background: 'linear-gradient(145deg, rgba(46, 204, 113, 0.15) 0%, rgba(39, 174, 96, 0.25) 100%)',
+                  border: '1px solid #2ecc71',
+                  color: '#2ecc71',
+                  cursor: 'pointer',
+                  boxShadow: '0 4px 12px rgba(46, 204, 113, 0.15)',
+                  transition: 'all 0.2s'
+                }}
+              >
+                {t.privacy_policy}
+              </button>
+
+              <button 
+                onClick={() => showPromptPlaceholder("Kullanım Koşulları")} 
+                style={{
+                  margin: '0', 
+                  padding: '12px', 
+                  fontSize: '12px', 
+                  fontWeight: '700',
+                  borderRadius: '10px',
+                  background: 'linear-gradient(145deg, rgba(41, 182, 246, 0.15) 0%, rgba(2, 136, 209, 0.25) 100%)',
+                  border: '1px solid #29b6f6',
+                  color: '#29b6f6',
+                  cursor: 'pointer',
+                  boxShadow: '0 4px 12px rgba(41, 182, 246, 0.15)',
+                  transition: 'all 0.2s'
+                }}
+              >
+                {t.terms_of_service}
+              </button>
+
+              <button 
+                onClick={() => showPromptPlaceholder("Oyun Kuralları")} 
+                style={{
+                  margin: '0', 
+                  padding: '12px', 
+                  fontSize: '12px', 
+                  fontWeight: '700',
+                  borderRadius: '10px',
+                  background: 'linear-gradient(145deg, rgba(255, 183, 77, 0.15) 0%, rgba(245, 124, 0, 0.25) 100%)',
+                  border: '1px solid #ffb74d',
+                  color: '#ffb74d',
+                  cursor: 'pointer',
+                  boxShadow: '0 4px 12px rgba(255, 183, 77, 0.15)',
+                  transition: 'all 0.2s'
+                }}
+              >
+                {t.rules}
+              </button>
+
+              <button 
+                onClick={() => setShowCreditsModal(true)} 
+                style={{
+                  margin: '0', 
+                  padding: '12px', 
+                  fontSize: '12px', 
+                  fontWeight: '700',
+                  borderRadius: '10px',
+                  background: 'linear-gradient(145deg, rgba(156, 39, 176, 0.15) 0%, rgba(123, 31, 162, 0.25) 100%)',
+                  border: '1px solid #ba68c8',
+                  color: '#e1bee7',
+                  cursor: 'pointer',
+                  boxShadow: '0 4px 12px rgba(156, 39, 176, 0.15)',
+                  transition: 'all 0.2s'
+                }}
+              >
+                {t.credits || 'Emeği Geçenler'}
+              </button>
             </div>
           </div>
         </div>
       </div>
+
+      {/* Promosyon Kodu Modal */}
+      {showPromoModal && (
+        <div className="modal-backdrop" style={{ zIndex: 1000, background: 'rgba(0,0,0,0.85)', backdropFilter: 'blur(10px)' }}>
+          <div className="modal" style={{ maxWidth: '420px', background: 'linear-gradient(145deg, #141821 0%, #0d1017 100%)', border: '1px solid #ffb74d', borderRadius: '16px', padding: '24px', color: '#fff', boxShadow: '0 10px 40px rgba(255,183,77,0.3)' }}>
+            <h3 style={{ fontSize: '18px', fontWeight: '800', color: '#ffb74d', marginBottom: '14px', textAlign: 'center' }}>🎁 {language === 'English' ? 'REDEEM PROMO CODE' : 'PROMOSYON KODU KULLAN'}</h3>
+            <p style={{ fontSize: '12px', color: '#8892b0', marginBottom: '16px', textAlign: 'center' }}>
+              {language === 'English' ? 'Enter your gift code to unlock special coins and rewards!' : 'Özel hediyelerinizi ve ödüllerinizi yüklemek için kodunuzu girin!'}
+            </p>
+            <input 
+              type="text"
+              value={promoCodeInput}
+              onChange={(e) => setPromoCodeInput(e.target.value)}
+              placeholder="Örn: FT26-GOLD-2026"
+              style={{
+                width: '100%',
+                padding: '12px 14px',
+                borderRadius: '8px',
+                border: '1px solid rgba(255,183,77,0.4)',
+                background: 'rgba(0,0,0,0.5)',
+                color: '#fff',
+                fontSize: '14px',
+                fontWeight: 'bold',
+                textAlign: 'center',
+                letterSpacing: '1px',
+                outline: 'none',
+                marginBottom: '16px'
+              }}
+            />
+            <div style={{ display: 'flex', gap: '10px' }}>
+              <button 
+                onClick={() => setShowPromoModal(false)}
+                style={{ flex: 1, padding: '10px', borderRadius: '8px', background: 'rgba(255,255,255,0.08)', border: '1px solid rgba(255,255,255,0.1)', color: '#aaa', fontWeight: 'bold', cursor: 'pointer' }}
+              >
+                {t.back || 'İptal'}
+              </button>
+              <button 
+                onClick={handlePromoSubmit}
+                style={{ flex: 1, padding: '10px', borderRadius: '8px', background: 'linear-gradient(135deg, #ffb74d, #f57c00)', border: 'none', color: '#000', fontWeight: '800', cursor: 'pointer' }}
+              >
+                {language === 'English' ? 'Redeem' : 'Kullan'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Emeği Geçenler Modal */}
+      {showCreditsModal && (
+        <div className="modal-backdrop" style={{ zIndex: 1000, background: 'rgba(0,0,0,0.85)', backdropFilter: 'blur(10px)' }}>
+          <div className="modal" style={{ maxWidth: '420px', background: 'linear-gradient(145deg, #141821 0%, #0d1017 100%)', border: '1px solid #ba68c8', borderRadius: '16px', padding: '24px', color: '#fff', boxShadow: '0 10px 40px rgba(186,104,200,0.3)' }}>
+            <h3 style={{ fontSize: '18px', fontWeight: '800', color: '#ba68c8', marginBottom: '14px', textAlign: 'center' }}>⭐ {language === 'English' ? 'GAME CREDITS' : 'EMEĞİ GEÇENLER'}</h3>
+            <div style={{ fontSize: '13px', lineHeight: '1.8', color: '#e5e2e1', textAlign: 'center', marginBottom: '20px' }}>
+              <div style={{ fontWeight: '800', color: '#00e5ff', fontSize: '15px' }}>FOOTBALL TOUR SIMULATOR — 3D</div>
+              <div style={{ fontSize: '11px', color: '#8892b0', marginBottom: '14px' }}>v1.02 Isometric Edition</div>
+              <p><strong>Geliştirici & Tasarım:</strong> Football Tour Dev Team</p>
+              <p><strong>3D Sahne & Motor:</strong> Three.js Engine</p>
+              <p><strong>Ses & Müzik:</strong> Sound Assets Studio</p>
+              <p><strong>Altyapı & Veritabanı:</strong> Supabase Cloud Service</p>
+            </div>
+            <button 
+              onClick={() => setShowCreditsModal(false)}
+              style={{ width: '100%', padding: '10px', borderRadius: '8px', background: 'linear-gradient(135deg, #ba68c8, #7b1fa2)', border: 'none', color: '#fff', fontWeight: 'bold', cursor: 'pointer' }}
+            >
+              {language === 'English' ? 'Close' : 'Kapat'}
+            </button>
+          </div>
+        </div>
+      )}
     </PageShell>
   );
 }

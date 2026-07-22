@@ -13,8 +13,9 @@ class ApiService {
 
   // Dinamik Token Getter
   get token() {
-    if (!this._token && typeof window !== 'undefined') {
-      this._token = localStorage.getItem('ft26_auth_token') || null;
+    if (typeof window !== 'undefined') {
+      const stored = localStorage.getItem('ft26_auth_token');
+      if (stored) return stored;
     }
     return this._token;
   }
@@ -87,7 +88,11 @@ class ApiService {
         method: 'GET',
         headers: this._headers()
       });
-      return await res.json();
+      const data = await res.json();
+      if (res.status === 401 || (data && data.error && data.error.includes('token'))) {
+        this.clearToken();
+      }
+      return data;
     } catch (err) {
       console.warn(`[ApiService] GET ${endpoint} hatası:`, err);
       return { error: 'Bağlantı hatası. Sunucu çalışıyor mu?' };
@@ -102,7 +107,11 @@ class ApiService {
         headers: this._headers(),
         body: JSON.stringify(data)
       });
-      return await res.json();
+      const resData = await res.json();
+      if (res.status === 401 || (resData && resData.error && resData.error.includes('token'))) {
+        this.clearToken();
+      }
+      return resData;
     } catch (err) {
       console.warn(`[ApiService] POST ${endpoint} hatası:`, err);
       return { error: 'Bağlantı hatası. Sunucu çalışıyor mu?' };
@@ -117,7 +126,11 @@ class ApiService {
         headers: this._headers(),
         body: JSON.stringify(data)
       });
-      return await res.json();
+      const resData = await res.json();
+      if (res.status === 401 || (resData && resData.error && resData.error.includes('token'))) {
+        this.clearToken();
+      }
+      return resData;
     } catch (err) {
       console.warn(`[ApiService] PUT ${endpoint} hatası:`, err);
       return { error: 'Bağlantı hatası. Sunucu çalışıyor mu?' };
@@ -339,8 +352,12 @@ class ApiService {
     return await this._get(`/multiplayer/sessions/${sessionId}`);
   }
 
-  async updateMultiplayerState(sessionId, stateData, eventType = 'state_update') {
-    return await this._put(`/multiplayer/sessions/${sessionId}/state`, { state_data: stateData, event_type: eventType });
+  async updateMultiplayerState(sessionId, stateData, eventType = 'state_update', version = null) {
+    return await this._put(`/multiplayer/sessions/${sessionId}/state`, {
+      state_data: stateData,
+      event_type: eventType,
+      version
+    });
   }
 
   async finishMultiplayerSession(sessionId, stateData, resultData) {

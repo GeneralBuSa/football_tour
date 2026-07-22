@@ -18,57 +18,85 @@ router.post('/purchase', authenticate, async (req, res) => {
   const { item_id } = req.body;
   if (!item_id) return res.status(400).json({ error: 'item_id required' });
 
-  const { data: item, error: itemError } = await supabase
-    .from('store_items')
-    .select('*')
-    .eq('id', item_id)
-    .single();
-
-  if (itemError || !item) return res.status(404).json({ error: 'Item not found' });
-
-  const { data: existingPurchase } = await supabase
-    .from('purchases')
-    .select('id')
-    .eq('user_id', req.user.id)
-    .eq('item_id', item_id)
-    .maybeSingle();
-
-  if (existingPurchase) return res.status(409).json({ error: 'Bu eşya zaten satın alınmış.' });
-
-  const { data: stats, error: statsError } = await supabase
-    .from('stats')
-    .select('total_earnings')
-    .eq('user_id', req.user.id)
-    .single();
-
-  if (statsError || !stats) return res.status(404).json({ error: 'Stats not found' });
-  if ((stats.total_earnings || 0) < item.price) {
-    return res.status(400).json({ error: 'Yetersiz bakiye' });
-  }
-
-  const newBalance = stats.total_earnings - item.price;
-  const { error: updateError } = await supabase
-    .from('stats')
-    .update({ total_earnings: newBalance, updated_at: new Date().toISOString() })
-    .eq('user_id', req.user.id);
-
-  if (updateError) return res.status(400).json({ error: updateError.message });
-
-  const { data, error } = await supabase
-    .from('purchases')
-    .insert([{ user_id: req.user.id, item_id }])
-    .select('*, store_items(*)')
-    .single();
+  const { data, error } = await supabase.rpc('purchase_store_item', {
+    p_user_id: req.user.id,
+    p_item_id: item_id
+  });
 
   if (error) {
+    const message = error.message || 'Purchase failed';
+    if (message.includes('ITEM_NOT_FOUND')) return res.status(404).json({ error: 'Item not found' });
+    if (message.includes('ITEM_ALREADY_PURCHASED')) return res.status(409).json({ error: 'Bu eşya zaten satın alınmış.' });
+    if (message.includes('INSUFFICIENT_BALANCE')) return res.status(400).json({ error: 'Yetersiz bakiye' });
+
+    // Özel bilinen hatalar dışındaki tüm SQL/fonksiyon/kısıt (ON CONFLICT vb.) hatalarında JS fallback çalıştır
+    const { data: item, error: itemErr } = await supabase
+      .from('store_items')
+      .select('id, price')
+      .eq('id', item_id)
+      .maybeSingle();
+
+    if (itemErr || !item) return res.status(404).json({ error: 'Item not found' });
+
+    const { data: existing } = await supabase
+      .from('purchases')
+      .select('id')
+      .eq('user_id', req.user.id)
+      .eq('item_id', item_id)
+      .maybeSingle();
+
+    if (existing) return res.status(409).json({ error: 'Bu eşya zaten satın alınmış.' });
+
+    const { data: userStats } = await supabase
+      .from('stats')
+      .select('total_earnings')
+      .eq('user_id', req.user.id)
+      .maybeSingle();
+
+    const currentBalance = Number(userStats?.total_earnings || 0);
+    if (currentBalance < Number(item.price)) {
+      return res.status(400).json({ error: 'Yetersiz bakiye' });
+    }
+
+    const newBalance = currentBalance - Number(item.price);
+
+    const { data: purchaseData, error: purchaseErr } = await supabase
+      .from('purchases')
+      .insert([{ user_id: req.user.id, item_id }])
+      .select()
+      .single();
+
+    if (purchaseErr) {
+      if (purchaseErr.code === '23505' || purchaseErr.message.includes('unique')) {
+        return res.status(409).json({ error: 'Bu eşya zaten satın alınmış.' });
+      }
+      return res.status(400).json({ error: purchaseErr.message });
+    }
+
     await supabase
       .from('stats')
-      .update({ total_earnings: stats.total_earnings, updated_at: new Date().toISOString() })
+      .update({ total_earnings: newBalance, updated_at: new Date().toISOString() })
       .eq('user_id', req.user.id);
-    return res.status(400).json({ error: error.message });
+
+    return res.json({
+      id: purchaseData.id,
+      user_id: req.user.id,
+      item_id,
+      balance: newBalance
+    });
+
+    return res.status(400).json({ error: message });
   }
 
-  res.json({ ...data, balance: newBalance });
+  const purchase = data?.[0];
+  if (!purchase) return res.status(500).json({ error: 'Purchase result missing' });
+
+  res.json({
+    id: purchase.purchase_id || purchase.out_purchase_id,
+    user_id: req.user.id,
+    item_id: purchase.item_id || purchase.out_item_id || item_id,
+    balance: purchase.balance || purchase.out_balance
+  });
 });
 
 router.get('/purchases/:userId', authenticate, requireSameUser, async (req, res) => {

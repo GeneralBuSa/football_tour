@@ -10,59 +10,18 @@ router.post('/join', authenticate, async (req, res) => {
   const user_id = req.user.id;
 
   try {
-    // 1. Varsa eski sırayı temizle
-    await supabase.from('lobby_queue').delete().eq('user_id', user_id);
+    const { data, error } = await supabase.rpc('matchmake_player', { p_user_id: user_id });
+    if (error) return res.status(400).json({ error: error.message });
 
-    // 2. Bekleyen oyuncu ara
-    const { data: waitingPlayers, error: searchError } = await supabase
-      .from('lobby_queue')
-      .select('*, users(username, avatar)')
-      .eq('status', 'searching')
-      .neq('user_id', user_id)
-      .order('created_at', { ascending: true })
-      .limit(1);
+    const result = data?.[0];
+    if (!result) return res.status(500).json({ error: 'Matchmaking result missing' });
 
-    if (searchError) return res.status(400).json({ error: searchError.message });
-
-    if (waitingPlayers && waitingPlayers.length > 0) {
-      const peer = waitingPlayers[0];
-
-      const { data: session, error: sessionError } = await supabase
-        .from('game_sessions')
-        .insert([{ host_user_id: peer.user_id, status: 'active', mode: 'matchmaking', state_data: {} }])
-        .select()
-        .single();
-
-      if (sessionError) return res.status(400).json({ error: sessionError.message });
-
-      await supabase.from('game_session_players').insert([
-        { session_id: session.id, user_id: peer.user_id, role: 'host' },
-        { session_id: session.id, user_id, role: 'guest' }
-      ]);
-
-      // Eşleşme bulundu, her iki tarafı da güncelle
-      const { error: updateSelfError } = await supabase
-        .from('lobby_queue')
-        .insert([{ user_id, status: 'matched', matched_with: peer.user_id, session_id: session.id }]);
-
-      if (updateSelfError) return res.status(400).json({ error: updateSelfError.message });
-
-      await supabase
-        .from('lobby_queue')
-        .update({ status: 'matched', matched_with: user_id, session_id: session.id })
-        .eq('user_id', peer.user_id);
-
-      return res.json({ status: 'matched', matched_with: peer.users?.username || 'Rakip', avatar: peer.users?.avatar || '👤', session_id: session.id });
-    } else {
-      // Bekleyen yoksa sıraya ekle
-      const { error: insertError } = await supabase
-        .from('lobby_queue')
-        .insert([{ user_id, status: 'searching' }]);
-
-      if (insertError) return res.status(400).json({ error: insertError.message });
-
-      return res.json({ status: 'searching' });
-    }
+    return res.json({
+      status: result.status,
+      matched_with: result.matched_username || undefined,
+      avatar: result.avatar || undefined,
+      session_id: result.session_id || undefined
+    });
   } catch (e) {
     res.status(500).json({ error: 'Server error' });
   }
@@ -141,51 +100,29 @@ router.post('/join-private', authenticate, async (req, res) => {
   if (!host_username) return res.status(400).json({ error: 'Missing fields' });
 
   try {
-    const { data: host, error: hostError } = await supabase
-      .from('users')
-      .select('id')
-      .eq('username', host_username)
-      .single();
+    const { data, error } = await supabase.rpc('join_private_session', {
+      p_user_id: user_id,
+      p_host_username: host_username
+    });
 
-    if (hostError || !host) return res.status(404).json({ error: 'Oda kurucusu bulunamadı!' });
-    if (host.id === user_id) return res.status(400).json({ error: 'Kendi odanıza katılamazsınız!' });
-
-    const { data: hostLobby, error: lobbyError } = await supabase
-      .from('lobby_queue')
-      .select('*')
-      .eq('user_id', host.id)
-      .eq('status', 'waiting_private')
-      .single();
-
-    if (lobbyError || !hostLobby) {
-      return res.status(404).json({ error: 'Aktif bir özel oda bulunamadı veya oda dolu!' });
+    if (error) {
+      const message = error.message || 'Private room join failed';
+      if (message.includes('HOST_NOT_FOUND')) return res.status(404).json({ error: 'Oda kurucusu bulunamadı!' });
+      if (message.includes('CANNOT_JOIN_OWN_ROOM')) return res.status(400).json({ error: 'Kendi odanıza katılamazsınız!' });
+      if (message.includes('PRIVATE_ROOM_UNAVAILABLE')) {
+        return res.status(404).json({ error: 'Aktif bir özel oda bulunamadı veya oda dolu!' });
+      }
+      return res.status(400).json({ error: message });
     }
 
-    await supabase.from('lobby_queue').delete().eq('user_id', user_id);
-
-    const { data: session, error: sessionError } = await supabase
-      .from('game_sessions')
-      .insert([{ host_user_id: host.id, status: 'active', mode: 'private', state_data: {} }])
-      .select()
-      .single();
-
-    if (sessionError) return res.status(400).json({ error: sessionError.message });
-
-    await supabase.from('game_session_players').insert([
-      { session_id: session.id, user_id: host.id, role: 'host' },
-      { session_id: session.id, user_id, role: 'guest' }
-    ]);
-
-    await supabase
-      .from('lobby_queue')
-      .insert([{ user_id, status: 'matched', matched_with: host.id, session_id: session.id }]);
-
-    await supabase
-      .from('lobby_queue')
-      .update({ status: 'matched', matched_with: user_id, session_id: session.id })
-      .eq('user_id', host.id);
-
-    return res.json({ status: 'matched', matched_with: host_username, session_id: session.id });
+    const result = data?.[0];
+    if (!result) return res.status(500).json({ error: 'Private room result missing' });
+    return res.json({
+      status: result.status,
+      matched_with: result.matched_username,
+      avatar: result.avatar,
+      session_id: result.session_id
+    });
   } catch (e) {
     res.status(500).json({ error: 'Server error' });
   }

@@ -7,9 +7,19 @@ import {
   gameEnded,
   setCurrentPlayer, setTurnCount, setDiceRolled, setTutorialText, setGameEnded
 } from './state.js';
-import { updateTutorialHUD } from '../ui/panel.js';
-import { renderPanel } from '../ui/panel.js';
+import { updateTutorialHUD, renderPanel, showNotif } from '../ui/panel.js';
 import gameService from '../../services/GameService.js';
+import multiplayerService from '../../services/MultiplayerService.js';
+
+function escapeHtml(value) {
+  return String(value ?? '').replace(/[&<>"']/g, char => ({
+    '&': '&amp;',
+    '<': '&lt;',
+    '>': '&gt;',
+    '"': '&quot;',
+    "'": '&#39;'
+  }[char]));
+}
 
 // Oyuncu HUD kartlarını çiz (ekran köşeleri)
 export function renderPlayers() {
@@ -33,10 +43,10 @@ export function renderPlayers() {
     html += `
       <div class="hud-player-card ${cardTheme}" style="position: absolute; ${positions[idx]} ${isActive ? 'box-shadow: 0 0 20px ' + p.color + '; transform: scale(1.03);' : 'opacity: 0.85;'}">
         <div class="hud-avatar-box" style="background:${p.color}22; overflow: hidden; display: flex; align-items: center; justify-content: center; border-radius: 50%;">
-          ${p.avatarImg ? `<img src="${p.avatarImg}" style="width: 100%; height: 100%; object-fit: cover;" />` : `<span style="font-size:32px">${p.avatar}</span>`}
+          ${p.avatarImg ? `<img src="${escapeHtml(p.avatarImg)}" style="width: 100%; height: 100%; object-fit: cover;" />` : `<span style="font-size:32px">${escapeHtml(p.avatar)}</span>`}
         </div>
         <div class="hud-info">
-          <span class="hud-name" style="color:${p.color}">${p.name}</span>
+          <span class="hud-name" style="color:${p.color}">${escapeHtml(p.name)}</span>
           <span class="hud-money-badge">💵 ₺${p.money.toLocaleString()}</span>
         </div>
       </div>
@@ -49,13 +59,17 @@ export function renderPlayers() {
 // Sıra bitirme
 export function endTurn() {
   if (gameEnded) return;
+  if (!multiplayerService.canControlTurn(currentPlayer)) {
+    showNotif('Bu tur rakibinizin. Hamle yapabilmek için sıranızı bekleyin.');
+    return;
+  }
   setCurrentPlayer((currentPlayer + 1) % PLAYERS.length);
   if (currentPlayer === 0) setTurnCount(turnCount + 1);
   setDiceRolled(false);
 
   const rollBtn = document.getElementById('btn-roll');
   if (rollBtn) {
-    rollBtn.disabled = false;
+    rollBtn.disabled = !multiplayerService.canControlTurn(currentPlayer);
     rollBtn.style.display = '';
   }
 
