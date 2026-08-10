@@ -1,6 +1,7 @@
 import express from 'express';
 import { supabase } from '../db.js';
 import { createAuthMiddleware, requireSameUser } from '../middleware/auth.js';
+import { validateObjectBody } from '../middleware/security.js';
 
 const router = express.Router();
 const authenticate = createAuthMiddleware();
@@ -61,7 +62,7 @@ router.get('/:userId', authenticate, requireSameUser, async (req, res) => {
 });
 
 // Arkadaş isteği gönder
-router.post('/add', authenticate, async (req, res) => {
+router.post('/add', authenticate, validateObjectBody, async (req, res) => {
   const { friend_username } = req.body;
   const user_id = req.user.id;
   if (!friend_username) return res.status(400).json({ error: 'Missing fields' });
@@ -92,7 +93,7 @@ router.post('/add', authenticate, async (req, res) => {
 });
 
 // Arkadaşlık isteğini kabul et
-router.post('/accept', authenticate, async (req, res) => {
+router.post('/accept', authenticate, validateObjectBody, async (req, res) => {
   const { friend_id } = req.body;
   const user_id = req.user.id;
   if (!friend_id) return res.status(400).json({ error: 'Missing fields' });

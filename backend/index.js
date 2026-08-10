@@ -10,6 +10,7 @@ import lobbyRoutes from './routes/lobby.js';
 import friendsRoutes from './routes/friends.js';
 import savesRoutes from './routes/saves.js';
 import multiplayerRoutes from './routes/multiplayer.js';
+import { createRateLimiter, securityHeaders } from './middleware/security.js';
 
 dotenv.config();
 
@@ -24,7 +25,9 @@ app.use(cors({
     return callback(new Error('Not allowed by CORS'));
   }
 }));
-app.use(express.json());
+app.use(securityHeaders);
+app.use(express.json({ limit: '256kb' }));
+app.use('/api', createRateLimiter({ windowMs: 60 * 1000, max: 300 }));
 
 // Health check endpoint
 app.get('/api/health', (req, res) => {
@@ -44,7 +47,7 @@ app.use('/api/multiplayer', multiplayerRoutes);
 
 // Global Error Handler
 app.use((err, req, res, next) => {
-  console.error(err.stack);
+  console.error(`[${new Date().toISOString()}] ${req.method} ${req.originalUrl}`, err.message);
   res.status(500).json({ error: 'Something went wrong!' });
 });
 

@@ -8,15 +8,14 @@ export default function Page() {
   const [items, setItems] = useState([]);
   const [purchases, setPurchases] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState('');
 
   useEffect(() => {
     if (!gameReady) return;
 
     const savedLang = localStorage.getItem('ft26_language') || 'Türkçe';
-    const defaultItems = getDefaultItems(savedLang);
-
     if (isLoggedIn && user) {
-      loadData(user.id, savedLang);
+      loadData(user.id);
     } else {
       setLoading(false);
       setItems(defaultItems);
@@ -37,17 +36,16 @@ export default function Page() {
     ];
   };
 
-  const loadData = async (userId, currentLang) => {
-    const activeLang = currentLang || language;
-    const defaultItems = getDefaultItems(activeLang);
-
+  const loadData = async (userId) => {
     try {
       setLoading(true);
+      setLoadError('');
       const itemsRes = await apiService.getStoreItems();
       if (Array.isArray(itemsRes) && itemsRes.length > 0) {
         setItems(itemsRes);
       } else {
-        setItems(defaultItems);
+        setItems([]);
+        setLoadError(itemsRes?.error || 'Mağaza ürünleri yüklenemedi.');
       }
 
       const purchasesRes = await apiService.getMyPurchases();
@@ -77,19 +75,10 @@ export default function Page() {
       setLoading(true);
       
       let res;
-      if (item.id.startsWith('mock-')) {
-        res = { success: true };
-      } else {
-        res = await apiService.purchaseItem(item.id);
-      }
+      res = await apiService.purchaseItem(item.id);
 
       if (res && !res.error) {
         const newBalance = typeof res.balance === 'number' ? res.balance : currentBalance - item.price;
-        if (item.id.startsWith('mock-')) {
-          await apiService.updateStats(user.id, {
-            total_earnings: newBalance
-          });
-        }
         setStats(prev => ({ ...prev, total_earnings: newBalance }));
         
         alert(t.store_purchase_success.replace('{name}', item.name));
@@ -116,9 +105,11 @@ export default function Page() {
           <span>{t.store_title === "Mağaza" ? "🛒 OYUN İÇİ MAĞAZA" : "🛒 IN-GAME STORE"}</span>
         </div>
         <div className="dynamic-screen-body" style={{marginTop: '20px'}}>
-          {loading ? (
-            <div style={{color: '#fff', textAlign: 'center', padding: '40px'}}>{t.loading}</div>
-          ) : (
+           {loading ? (
+             <div style={{color: '#fff', textAlign: 'center', padding: '40px'}}>{t.loading}</div>
+           ) : loadError ? (
+             <div style={{color: '#ffb74d', textAlign: 'center', padding: '40px'}}>{loadError}</div>
+           ) : (
             <div className="store-items-container" id="store-items-container" style={{
               display: 'grid',
               gridTemplateColumns: 'repeat(auto-fill, minmax(220px, 1fr))',

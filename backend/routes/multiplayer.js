@@ -3,6 +3,7 @@ import { EventEmitter } from 'events';
 import { supabase } from '../db.js';
 import jwt from 'jsonwebtoken';
 import { createAuthMiddleware, requireEnv } from '../middleware/auth.js';
+import { validateObjectBody } from '../middleware/security.js';
 
 const router = express.Router();
 const authenticate = createAuthMiddleware();
@@ -25,7 +26,7 @@ async function broadcastSession(sessionId, payload) {
   sessionBus.emit(sessionId, { ...payload, emitted_at: new Date().toISOString() });
 }
 
-router.post('/sessions', authenticate, async (req, res) => {
+router.post('/sessions', authenticate, validateObjectBody, async (req, res) => {
   const { mode = 'private' } = req.body || {};
 
   const { data: session, error } = await supabase
@@ -45,7 +46,7 @@ router.post('/sessions', authenticate, async (req, res) => {
   res.json(session);
 });
 
-router.post('/sessions/:sessionId/join', authenticate, async (req, res) => {
+router.post('/sessions/:sessionId/join', authenticate, validateObjectBody, async (req, res) => {
   const { sessionId } = req.params;
 
   const { data: session, error: sessionError } = await supabase
@@ -55,6 +56,14 @@ router.post('/sessions/:sessionId/join', authenticate, async (req, res) => {
     .single();
 
   if (sessionError || !session) return res.status(404).json({ error: 'Session not found' });
+  if (session.status === 'finished') return res.status(409).json({ error: 'Session is already finished' });
+
+  const { count: playerCount, error: countError } = await supabase
+    .from('game_session_players')
+    .select('*', { count: 'exact', head: true })
+    .eq('session_id', sessionId);
+  if (countError) return res.status(500).json({ error: 'Failed to inspect session capacity' });
+  if (playerCount >= 2) return res.status(409).json({ error: 'Session is full' });
 
   const { error: joinError } = await supabase
     .from('game_session_players')
@@ -87,14 +96,27 @@ router.get('/sessions/:sessionId', authenticate, async (req, res) => {
   res.json(data);
 });
 
-router.put('/sessions/:sessionId/state', authenticate, async (req, res) => {
+router.put('/sessions/:sessionId/state', authenticate, validateObjectBody, async (req, res) => {
   const { sessionId } = req.params;
   const { state_data, event_type = 'state_update', version } = req.body || {};
 
-  if (!state_data) return res.status(400).json({ error: 'state_data required' });
+  if (!state_data || typeof state_data !== 'object' || Array.isArray(state_data)) {
+    return res.status(400).json({ error: 'state_data object required' });
+  }
+  if (JSON.stringify(state_data).length > 200_000) {
+    return res.status(413).json({ error: 'state_data is too large' });
+  }
   if (!(await ensureParticipant(sessionId, req.user.id))) {
     return res.status(403).json({ error: 'Session access denied' });
   }
+
+  const { data: currentSession, error: currentSessionError } = await supabase
+    .from('game_sessions')
+    .select('status')
+    .eq('id', sessionId)
+    .single();
+  if (currentSessionError) return res.status(404).json({ error: 'Session not found' });
+  if (currentSession.status === 'finished') return res.status(409).json({ error: 'Session is already finished' });
 
   try {
     // 1. Mevcut session durumunu çek
@@ -183,7 +205,7 @@ router.put('/sessions/:sessionId/state', authenticate, async (req, res) => {
   }
 });
 
-router.post('/sessions/:sessionId/finish', authenticate, async (req, res) => {
+router.post('/sessions/:sessionId/finish', authenticate, validateObjectBody, async (req, res) => {
   const { sessionId } = req.params;
   const { state_data = {}, result_data = {} } = req.body || {};
 

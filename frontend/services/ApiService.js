@@ -196,10 +196,6 @@ class ApiService {
     return await this._get(`/stats/${userId}`);
   }
 
-  async updateStats(userId, stats) {
-    return await this._put(`/stats/${userId}`, stats);
-  }
-
   // ==========================================
   // ACHIEVEMENTS API
   // ==========================================

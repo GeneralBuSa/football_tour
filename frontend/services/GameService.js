@@ -214,15 +214,8 @@ class PlayerService {
         }
         this._saveStats();
 
-        apiService.updateStats(currentUser.id, {
-          total_earnings: userStats.totalEarnings,
-          total_properties: userStats.totalProperties,
-          games_played: userStats.gamesPlayed,
-          highest_money: userStats.highestMoney,
-          wins: userStats.wins,
-          total_turns: userStats.totalTurns,
-          xp: newXp
-        }).catch(console.error);
+        // Persistent stats are server-owned. The client only submits the game result;
+        // it must never be allowed to write balances, wins, or XP directly.
       }
     }
   }

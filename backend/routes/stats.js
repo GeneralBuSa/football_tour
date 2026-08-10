@@ -42,33 +42,4 @@ router.get('/:userId', authenticate, requireSameUser, async (req, res) => {
   res.json(data);
 });
 
-router.put('/:userId', authenticate, requireSameUser, async (req, res) => {
-  const allowedFields = [
-    'total_earnings',
-    'total_properties',
-    'games_played',
-    'highest_money',
-    'wins',
-    'total_turns',
-    'xp'
-  ];
-  const updates = Object.fromEntries(
-    Object.entries(req.body).filter(([key]) => allowedFields.includes(key))
-  );
-  if (Object.keys(updates).length === 0) {
-    return res.status(400).json({ error: 'No valid stats fields provided' });
-  }
-  updates.updated_at = new Date().toISOString();
-  
-  const { data, error } = await supabase
-    .from('stats')
-    .update(updates)
-    .eq('user_id', req.params.userId)
-    .select()
-    .single();
-
-  if (error) return res.status(400).json({ error: error.message });
-  res.json(data);
-});
-
 export default router;

@@ -2,7 +2,7 @@
 
 Futbol temalı, Monopoly tarzı strateji ve yönetim oyunu. Projede Next.js tabanlı web arayüzü, Express tabanlı REST API, Supabase/PostgreSQL veri katmanı ve opsiyonel Tauri masaüstü kabuğu bulunur.
 
-> Not: Çevrimiçi lobi ve özel oda eşleştirmesi vardır; gerçek zamanlı oyun state senkronizasyonu henüz Socket.io/WebSocket ile uygulanmamıştır. Eşleşme sonrası oyun mevcut durumda yerel oyun akışıyla başlar.
+> Not: Çevrimiçi lobi, özel oda eşleştirmesi ve SSE tabanlı state aktarımı vardır. Üretim ölçeğinde çoklu instance desteği ve server-authoritative oyun komutları henüz tamamlanmamıştır.
 
 ## Özellikler
 
@@ -54,7 +54,7 @@ football_tour/
 ```bash
 cd backend
 npm install
-copy .env.example .env
+copy .env.example .env  # Windows; macOS/Linux: cp .env.example .env
 npm run dev
 ```
 
@@ -87,6 +87,10 @@ Schema şunları oluşturur:
 - `friends`
 - `lobby_queue`
 - `game_saves`
+- `game_sessions`
+- `game_session_players`
+- `game_session_events`
+- `password_reset_tokens`
 
 Ayrıca başlangıç mağaza ürünlerini seed eder.
 
@@ -95,7 +99,7 @@ Ayrıca başlangıç mağaza ürünlerini seed eder.
 ```bash
 cd frontend
 npm install
-copy .env.example .env.local
+copy .env.example .env.local  # Windows; macOS/Linux: cp .env.example .env.local
 npm run dev
 ```
 
@@ -107,6 +111,9 @@ Varsayılan backend API: `http://localhost:8000/api`
 ```bash
 # Backend geliştirme
 cd backend && npm run dev
+
+# Backend testleri
+cd backend && npm test
 
 # Backend syntax kontrolü
 cd backend && npm run check
@@ -126,17 +133,20 @@ cd frontend && npm run tauri dev
 
 - Backend `SUPABASE_URL`, `SUPABASE_SERVICE_KEY` ve `JWT_SECRET` olmadan başlamamalıdır.
 - Kullanıcıya özel API uçları JWT token üzerinden çalışır; body ile gönderilen `user_id` güven kaynağı değildir.
-- Satın alma işlemlerinde bakiye ve ürün fiyatı backend tarafından kontrol edilir.
+- Stats endpoint'i istemciden bakiye, XP veya galibiyet yazılmasına izin vermez; kalıcı istatistikler server-owned'dur.
+- Satın alma işlemlerinde bakiye ve ürün fiyatı tek RPC transaction'ında backend tarafından kontrol edilir.
+- API body boyutu 256 KB ile sınırlıdır; genel API, login ve şifre sıfırlama rate limit'leri aktiftir.
 - Supabase RLS politikaları service role API kullanımına göre sınırlandırılmıştır.
 - Tauri allowlist daraltılmıştır; yeni Tauri API ihtiyacı doğarsa sadece gereken izin açılmalıdır.
 
 ## Bilinen Eksikler
 
-- Gerçek zamanlı multiplayer oyun state senkronizasyonu henüz uygulanmadı.
-- Şifre sıfırlama akışı e-posta servisiyle tamamlanmalı; mevcut geliştirme akışı token döndürür.
+- Multiplayer SSE akışı tek backend instance ile sınırlıdır; çoklu instance için ortak event bus gerekir.
+- Oyun state'i hâlâ istemciden gelir; tam server-authoritative command modeline geçilmelidir.
+- Şifre sıfırlama token'ları hash'lenerek `password_reset_tokens` tablosunda saklanır ve tek kullanımlıdır.
 - Frontend sayfalarında ortak layout/hook refactor'ı yapılabilir.
 - `frontend/out` build çıktısı ignore edilir; dağıtım için build çıktısı CI/CD tarafında üretilmelidir.
 
 ## Lisans
 
-MIT
+Bu proje MIT lisansı ile dağıtılır. Ayrıntılar için [LICENSE](LICENSE) dosyasına bakın.

@@ -1,6 +1,7 @@
 import express from 'express';
 import { supabase } from '../db.js';
 import { createAuthMiddleware, requireSameUser } from '../middleware/auth.js';
+import { validateObjectBody } from '../middleware/security.js';
 
 const router = express.Router();
 const authenticate = createAuthMiddleware();
@@ -14,7 +15,7 @@ router.get('/items', async (req, res) => {
   res.json(data);
 });
 
-router.post('/purchase', authenticate, async (req, res) => {
+router.post('/purchase', authenticate, validateObjectBody, async (req, res) => {
   const { item_id } = req.body;
   if (!item_id) return res.status(400).json({ error: 'item_id required' });
 
@@ -29,63 +30,8 @@ router.post('/purchase', authenticate, async (req, res) => {
     if (message.includes('ITEM_ALREADY_PURCHASED')) return res.status(409).json({ error: 'Bu eşya zaten satın alınmış.' });
     if (message.includes('INSUFFICIENT_BALANCE')) return res.status(400).json({ error: 'Yetersiz bakiye' });
 
-    // Özel bilinen hatalar dışındaki tüm SQL/fonksiyon/kısıt (ON CONFLICT vb.) hatalarında JS fallback çalıştır
-    const { data: item, error: itemErr } = await supabase
-      .from('store_items')
-      .select('id, price')
-      .eq('id', item_id)
-      .maybeSingle();
-
-    if (itemErr || !item) return res.status(404).json({ error: 'Item not found' });
-
-    const { data: existing } = await supabase
-      .from('purchases')
-      .select('id')
-      .eq('user_id', req.user.id)
-      .eq('item_id', item_id)
-      .maybeSingle();
-
-    if (existing) return res.status(409).json({ error: 'Bu eşya zaten satın alınmış.' });
-
-    const { data: userStats } = await supabase
-      .from('stats')
-      .select('total_earnings')
-      .eq('user_id', req.user.id)
-      .maybeSingle();
-
-    const currentBalance = Number(userStats?.total_earnings || 0);
-    if (currentBalance < Number(item.price)) {
-      return res.status(400).json({ error: 'Yetersiz bakiye' });
-    }
-
-    const newBalance = currentBalance - Number(item.price);
-
-    const { data: purchaseData, error: purchaseErr } = await supabase
-      .from('purchases')
-      .insert([{ user_id: req.user.id, item_id }])
-      .select()
-      .single();
-
-    if (purchaseErr) {
-      if (purchaseErr.code === '23505' || purchaseErr.message.includes('unique')) {
-        return res.status(409).json({ error: 'Bu eşya zaten satın alınmış.' });
-      }
-      return res.status(400).json({ error: purchaseErr.message });
-    }
-
-    await supabase
-      .from('stats')
-      .update({ total_earnings: newBalance, updated_at: new Date().toISOString() })
-      .eq('user_id', req.user.id);
-
-    return res.json({
-      id: purchaseData.id,
-      user_id: req.user.id,
-      item_id,
-      balance: newBalance
-    });
-
-    return res.status(400).json({ error: message });
+    console.error('[store/purchase] RPC failed:', message);
+    return res.status(503).json({ error: 'Purchase service is temporarily unavailable' });
   }
 
   const purchase = data?.[0];

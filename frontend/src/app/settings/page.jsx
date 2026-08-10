@@ -210,10 +210,6 @@ export default function SettingsPage() {
     setPromoCodeInput('');
   };
 
-  const showPromptPlaceholder = (title) => {
-    alert(`${title} yakında eklenecek!`);
-  };
-
   const t = language === 'English' ? en : tr;
 
   return (
@@ -458,7 +454,7 @@ export default function SettingsPage() {
               paddingTop: '20px'
             }}>
               <button 
-                onClick={() => showPromptPlaceholder("Gizlilik Politikası")} 
+                onClick={() => { window.location.href = '/privacy'; }}
                 style={{
                   margin: '0', 
                   padding: '12px', 
@@ -477,7 +473,7 @@ export default function SettingsPage() {
               </button>
 
               <button 
-                onClick={() => showPromptPlaceholder("Kullanım Koşulları")} 
+                onClick={() => { window.location.href = '/terms'; }}
                 style={{
                   margin: '0', 
                   padding: '12px', 
@@ -496,7 +492,7 @@ export default function SettingsPage() {
               </button>
 
               <button 
-                onClick={() => showPromptPlaceholder("Oyun Kuralları")} 
+                onClick={() => { window.location.href = '/rules'; }}
                 style={{
                   margin: '0', 
                   padding: '12px', 

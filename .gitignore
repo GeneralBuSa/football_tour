@@ -1,5 +1,6 @@
 ﻿# Bağımlılıklar
 node_modules/
+.codebase-memory/
 npm-debug.log*
 yarn-debug.log*
 yarn-error.log*
@@ -42,6 +43,7 @@ frontend/src-tauri/Frameworks/
 # Log dosyaları
 logs/
 *.log
+coverage/
 
 # Geçici dosyalar
 tmp/

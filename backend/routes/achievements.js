@@ -1,9 +1,14 @@
 import express from 'express';
 import { supabase } from '../db.js';
 import { createAuthMiddleware, requireSameUser } from '../middleware/auth.js';
+import { validateObjectBody } from '../middleware/security.js';
 
 const router = express.Router();
 const authenticate = createAuthMiddleware();
+const ALLOWED_ACHIEVEMENTS = new Set([
+  'PROPERTIES_5', 'MAX_STADIUM', 'WIN_WORLD_CUP', 'GOLD_LOOT',
+  'BANKRUPT', 'FIRST_WIN', 'RICH_PLAYER', 'FULL_GROUP'
+]);
 
 router.get('/:userId', authenticate, requireSameUser, async (req, res) => {
   const { data, error } = await supabase
@@ -15,9 +20,20 @@ router.get('/:userId', authenticate, requireSameUser, async (req, res) => {
   res.json(data);
 });
 
-router.post('/:userId', authenticate, requireSameUser, async (req, res) => {
+router.post('/:userId', authenticate, requireSameUser, validateObjectBody, async (req, res) => {
   const { achievement_id } = req.body;
-  if (!achievement_id) return res.status(400).json({ error: 'achievement_id required' });
+  if (typeof achievement_id !== 'string' || !ALLOWED_ACHIEVEMENTS.has(achievement_id)) {
+    return res.status(400).json({ error: 'A valid achievement_id is required' });
+  }
+
+  const { data: existing } = await supabase
+    .from('achievements')
+    .select('*')
+    .eq('user_id', req.params.userId)
+    .eq('achievement_id', achievement_id)
+    .limit(1)
+    .maybeSingle();
+  if (existing) return res.json(existing);
 
   const { data, error } = await supabase
     .from('achievements')

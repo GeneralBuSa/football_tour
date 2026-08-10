@@ -57,7 +57,7 @@ Proje şu anda çalışan bir **Next.js frontend**, **Express backend**, **Supab
 
 ---
 
-### 3.2 Şifre Sıfırlama E-posta Entegrasyonu — YARIM ⚠️
+### 3.2 Şifre Sıfırlama E-posta Entegrasyonu — TAMAMLANDI ✅
 
 **Backend durumu:** Tamamlanmış.
 - `backend/services/email.js` — Resend entegrasyonu hazır
@@ -65,26 +65,21 @@ Proje şu anda çalışan bir **Next.js frontend**, **Express backend**, **Supab
 - Rate limiting aktif (satır 17-25)
 - E-posta yapılandırılmışsa `emailSent: true` döner, yapılandırılmamışsa dev token döner
 
-**Frontend durumu:** Eksik.
-- `frontend/src/app/auth/page.jsx` satır 109 → Sadece `res.resetToken` kontrol ediliyor
-- `emailSent: true` yanıtı (e-posta gönderildiği durum) hiç ele alınmıyor
-- URL'den `?resetToken=xxx` query parametresi okunmuyor
+**Frontend durumu:** Tamamlandı.
+- `frontend/src/app/auth/page.jsx` → `resetToken` ve `emailSent` yanıtları ele alınıyor
+- URL'den `?resetToken=xxx` query parametresi okunuyor
 
-**Yapılacak:**
-1. [ ] `frontend/src/app/auth/page.jsx` → `handleForgotPassword` fonksiyonunda (satır 98-120) `emailSent` durumu eklenecek:
-   - `res.emailSent === true` ise: "E-posta gönderildi, mail kutunuzu kontrol edin" mesajı gösterilecek
-   - `res.resetToken` varsa (dev modu): Mevcut davranış korunacak
-2. [ ] `useEffect` içinde (satır 41-48) `window.location.search`'ten `resetToken` query parametresi okunacak → otomatik olarak `resetStep: 2`'ye geçilecek
-3. [ ] Backend `.env.example` zaten güncel → Ek işlem gerekmez
+**Tamamlanan ek güvenlik:**
+1. [x] `password_reset_tokens` tablosu ve hash'lenmiş, tek kullanımlık token akışı
 
 **Kabul kriteri:**
 - Resend env yokken dev token akışıyla şifre sıfırlanabilir ✅ (zaten çalışıyor)
-- Resend env varken token response'ta dönmez, e-posta linki üretilir ✅ (backend hazır, frontend eksik)
-- `/auth?resetToken=...` direkt yeni şifre formunu açar ❌ (frontend'de query okuma yok)
+- Resend env varken token response'ta dönmez, e-posta linki üretilir ✅
+- `/auth?resetToken=...` direkt yeni şifre formunu açar ✅
 
 ---
 
-### 3.3 Multiplayer Senkronizasyon Altyapısı — YARIM ⚠️
+### 3.3 Multiplayer Senkronizasyon Altyapısı — BETA ⚠️
 
 **Tamamlanmış kısımlar:**
 - `database/schema.sql` satır 145-185 → `game_sessions`, `game_session_players`, `game_session_events` tabloları hazır
@@ -96,52 +91,46 @@ Proje şu anda çalışan bir **Next.js frontend**, **Express backend**, **Supab
 
 **Kritik sorunlar:**
 
-#### Sorun 1: SSE Auth Uyumsuzluğu 🔴
+#### Eski sorun notu: SSE Auth Uyumsuzluğu
 - **Backend** (`multiplayer.js` satır 146): `authenticate` middleware kullanıyor → `Authorization: Bearer xxx` header bekliyor
 - **Frontend** (`MultiplayerService.js` satır 31): `?token=xxx` query parametresi gönderiyor
-- **Sonuç:** Tarayıcı `EventSource` API'si custom header gönderemez → SSE bağlantısı **401 döner**
+- **Güncel durum:** Query token doğrulaması mevcut; üretimde kısa ömürlü SSE ticket tercih edilmelidir.
 
-#### Sorun 2: Lobby Status'ta `session_id` Eksik 🔴
+#### Eski sorun notu: Lobby Status'ta `session_id` Eksik
 - `backend/routes/lobby.js` satır 95-107: `matched` durumunda response'a `session_id` **eklenmiyor**
 - `lobby_queue` tablosunda `session_id` sütunu var (schema satır 174) ve join/match sırasında yazılıyor
-- Ancak status endpoint'inde select'e dahil edilip response'a aktarılmıyor
+- **Güncel durum:** `session_id` status yanıtına aktarılıyor.
 
-#### Sorun 3: `playLocalGame` Session ID Almıyor 🔴
+#### Eski sorun notu: `playLocalGame` Session ID Almıyor
 - `frontend/js/ui/menu.js` satır 14: `function playLocalGame()` → parametre kabul etmiyor
 - Satır 128 ve 481'de eşleşme sonrası `window.playLocalGame()` parametresiz çağrılıyor
-- `MultiplayerService.start()` hiç tetiklenmiyor
+- **Güncel durum:** Akış mevcut kodda session seçeneğini taşıyor; gerçek server-authoritative oyun akışı hâlâ beta.
 
-#### Sorun 4: State Sync Çağrıları Eksik 🟡
+#### Kalan sorun 1: State Sync kapsamı 🟡
 - `frontend/js/engine/dice.js`: Zar atma (`rollDice`, satır 20-41) ve piyon hareketi (`movePlayer`, satır 44-66) sonrası `syncMultiplayerState` çağrılmıyor
 - `frontend/js/engine/player.js`: `endTurn` fonksiyonu (satır 50-70) sonrası sync çağrısı yok
 - `frontend/js/engine/economy.js`: Satın alma ve stadyum geliştirme sonrası sync yok
 
-#### Sorun 5: Turn Ownership Kontrolü Yok 🟡
+#### Kalan sorun 2: Server-authoritative state 🟡
 - `backend/routes/multiplayer.js` satır 90-123: `PUT /sessions/:sessionId/state` sadece `ensureParticipant` kontrol ediyor
 - Herhangi bir katılımcı sırası olmasa bile state güncelleyebilir
 - `version` veya `updated_at` ile stale update kontrolü yok
 
-#### Sorun 6: Reconnect Stratejisi Yok 🟡
+#### Kalan sorun 3: Çoklu instance event dağıtımı 🟡
 - `MultiplayerService.js` satır 43-45: `onerror` sadece `console.warn` yapıyor
 - Bağlantı koptuğunda yeniden bağlanma mekanizması yok
 - Son session state'i backend'den çekme ve `applyGameSnapshot` ile uygulama mekanizması yok
 
-**Yapılacak:**
-1. [ ] SSE auth: `multiplayer.js` satır 146'da query token desteği eklenecek (`req.query.token` ile JWT doğrulama)
-2. [ ] `lobby.js` satır 95-107: `status === 'matched'` durumunda `data.session_id` response'a eklenecek
-3. [ ] `menu.js` satır 14: `playLocalGame(options)` parametresi eklenecek, `options.sessionId` varsa `MultiplayerService.start()` çağrılacak
-4. [ ] `menu.js` satır 128 ve 481: `window.playLocalGame({ sessionId: statusRes.session_id })` olarak güncellenecek
-5. [ ] `dice.js` satır 39-40: `movePlayer` sonrası `syncMultiplayerState('dice_roll')` eklenecek
-6. [ ] `player.js` satır 69: `endTurn` sonrası `syncMultiplayerState('end_turn')` eklenecek
-7. [ ] `multiplayer.js` satır 90-97: Turn ownership kontrolü eklenecek (state_data'dan sıradaki oyuncu ID kontrolü)
-8. [ ] `multiplayer.js`: State update'e `version` (updated_at) tabanlı optimistic locking eklenecek
-9. [ ] `MultiplayerService.js` satır 43-45: Exponential backoff ile reconnect mekanizması eklenecek
+**Kalan yapılacaklar:**
+1. [ ] Zar, ekonomi ve tur komutlarını backend’de doğrulayan server-authoritative protokol
+2. [ ] SSE yerine ortak event bus/WebSocket/Realtime katmanı
+3. [ ] Event replay cursor ve idempotent game actions
 
 **Kabul kriteri:**
-- İki farklı kullanıcı lobi ile aynı session id alır ❌ (session_id response'ta yok)
-- Bir oyuncu zar attığında diğer oyuncunun ekranı state update alır ❌ (SSE auth çalışmıyor)
-- Sıra dışı oyuncu backend'e aksiyon gönderemez ❌ (turn ownership yok)
-- Bağlantı kopup gelince son session state yüklenebilir ❌ (reconnect yok)
+- İki farklı kullanıcı lobi ile aynı session id alır ✅
+- SSE auth ve reconnect temel akışı çalışır ✅
+- Sıra kontrolü backend’de yapılır ✅; aksiyonun oyun kurallarına göre doğrulanması devam ediyor
+- Çoklu instance event dağıtımı ❌
 
 ---
 

@@ -1,12 +1,13 @@
 import express from 'express';
 import { supabase } from '../db.js';
 import { createAuthMiddleware, requireSameUser } from '../middleware/auth.js';
+import { validateObjectBody } from '../middleware/security.js';
 
 const router = express.Router();
 const authenticate = createAuthMiddleware();
 
 // Oyun kaydet (Upsert)
-router.post('/', authenticate, async (req, res) => {
+router.post('/', authenticate, validateObjectBody, async (req, res) => {
   const { save_data } = req.body;
   if (!save_data) return res.status(400).json({ error: 'save_data required' });
 
