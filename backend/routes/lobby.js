@@ -1,6 +1,7 @@
 import express from 'express';
 import { supabase } from '../db.js';
 import { createAuthMiddleware, requireSameUser } from '../middleware/auth.js';
+import { validateObjectBody } from '../middleware/security.js';
 
 const router = express.Router();
 const authenticate = createAuthMiddleware();
@@ -94,10 +95,12 @@ router.post('/create-private', authenticate, async (req, res) => {
 });
 
 // Özel odaya katıl (Guest)
-router.post('/join-private', authenticate, async (req, res) => {
+router.post('/join-private', authenticate, validateObjectBody, async (req, res) => {
   const { host_username } = req.body;
   const user_id = req.user.id;
-  if (!host_username) return res.status(400).json({ error: 'Missing fields' });
+  if (typeof host_username !== 'string' || !/^[A-Za-z0-9_]{3,24}$/.test(host_username)) {
+    return res.status(400).json({ error: 'Geçerli bir kullanıcı adı gerekli.' });
+  }
 
   try {
     const { data, error } = await supabase.rpc('join_private_session', {

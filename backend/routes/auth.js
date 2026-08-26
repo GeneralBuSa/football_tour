@@ -83,9 +83,6 @@ router.post('/register', validateObjectBody, async (req, res) => {
 
     const token = jwt.sign({ id: data.id, username: data.username }, jwtSecret, { expiresIn: '7d' });
     
-    // Create initial stats for the user
-    await supabase.from('stats').insert([{ user_id: data.id, total_earnings: 2000 }]);
-
     res.json({ token, user: { id: data.id, username: data.username, email: data.email, avatar: data.avatar } });
   } catch (e) {
     res.status(500).json({ error: 'Server error' });
@@ -95,6 +92,9 @@ router.post('/register', validateObjectBody, async (req, res) => {
 // Login
 router.post('/login', validateObjectBody, loginLimiter, async (req, res) => {
   const { username, password } = req.body;
+  if (!isValidUsername(username) || typeof password !== 'string' || password.length > 128) {
+    return res.status(400).json({ error: 'Invalid credentials' });
+  }
   
   try {
     const { data, error } = await supabase
@@ -157,6 +157,9 @@ router.put('/avatar', authenticate, validateObjectBody, async (req, res) => {
 router.post('/forgot-password', validateObjectBody, forgotPasswordLimiter, async (req, res) => {
   const { username, email } = req.body;
   if (!username || !email) return res.status(400).json({ error: 'Eksik bilgi girdiniz.' });
+  if (typeof username !== 'string' || typeof email !== 'string' || username.length > 24 || email.length > 320) {
+    return res.status(400).json({ error: 'Eksik bilgi girdiniz.' });
+  }
   const rateKey = `${username}:${email}:${req.ip}`;
   if (isResetRateLimited(rateKey)) {
     return res.status(429).json({ error: 'Çok fazla deneme yapıldı. Lütfen daha sonra tekrar deneyin.' });
@@ -186,6 +189,10 @@ router.post('/forgot-password', validateObjectBody, forgotPasswordLimiter, async
 if (isEmailConfigured()) {
       await sendPasswordResetEmail({ to: data.email, username: data.username, resetToken });
       return res.json({ success: true, emailSent: true });
+    }
+
+    if (process.env.NODE_ENV === 'production') {
+      return res.status(503).json({ error: 'Şifre sıfırlama e-posta servisi yapılandırılmamış.' });
     }
 
     res.json({ success: true, resetToken, devResetToken: true });

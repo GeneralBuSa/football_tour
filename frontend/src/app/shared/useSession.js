@@ -9,7 +9,7 @@ import en from '../../locales/en.json';
 export default function useSession({ loadStats = true } = {}) {
   const [isLoggedIn, setIsLoggedIn] = useState(false);
   const [user, setUser] = useState(null);
-  const [stats, setStats] = useState({ total_earnings: 2000, wins: 0 });
+  const [stats, setStats] = useState({ total_earnings: 0, wins: 0 });
   const [language, setLanguage] = useState('Türkçe');
   const [mounted, setMounted] = useState(false);
   const [gameReady, setGameReady] = useState(false);

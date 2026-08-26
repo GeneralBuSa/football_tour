@@ -28,6 +28,9 @@ async function broadcastSession(sessionId, payload) {
 
 router.post('/sessions', authenticate, validateObjectBody, async (req, res) => {
   const { mode = 'private' } = req.body || {};
+  if (!['private', 'matchmaking'].includes(mode)) {
+    return res.status(400).json({ error: 'Invalid session mode' });
+  }
 
   const { data: session, error } = await supabase
     .from('game_sessions')
@@ -209,6 +212,14 @@ router.post('/sessions/:sessionId/finish', authenticate, validateObjectBody, asy
   const { sessionId } = req.params;
   const { state_data = {}, result_data = {} } = req.body || {};
 
+  if (!state_data || typeof state_data !== 'object' || Array.isArray(state_data) ||
+      !result_data || typeof result_data !== 'object' || Array.isArray(result_data)) {
+    return res.status(400).json({ error: 'state_data and result_data objects required' });
+  }
+  if (JSON.stringify(state_data).length > 200_000 || JSON.stringify(result_data).length > 100_000) {
+    return res.status(413).json({ error: 'Game result is too large' });
+  }
+
   if (!(await ensureParticipant(sessionId, req.user.id))) {
     return res.status(403).json({ error: 'Session access denied' });
   }
@@ -217,6 +228,7 @@ router.post('/sessions/:sessionId/finish', authenticate, validateObjectBody, asy
     .from('game_sessions')
     .update({ state_data, result_data, status: 'finished', updated_at: new Date().toISOString() })
     .eq('id', sessionId)
+    .neq('status', 'finished')
     .select()
     .single();
 

@@ -248,6 +248,28 @@ class ApiService {
     return await this._get(`/store/purchases/${user.id}`);
   }
 
+  async getPlayerCatalog() {
+    return await this._get('/store/players');
+  }
+
+  async claimStarterCharacter(characterKey) {
+    return await this._post('/store/starter/claim', { character_key: characterKey });
+  }
+
+  async getCharacterEntitlements() {
+    const user = this.getUser();
+    if (!user) return { error: 'Giriş yapılmadı' };
+    return await this._get(`/store/entitlements/${user.id}`);
+  }
+
+  async getCoinPacks() {
+    return await this._get('/payments/coin-packs');
+  }
+
+  async createCoinCheckout(packKey) {
+    return await this._post('/payments/coin-packs/checkout', { pack_key: packKey });
+  }
+
   // ==========================================
   // SAĞLIK KONTROLÜ
   // ==========================================

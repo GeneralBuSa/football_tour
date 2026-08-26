@@ -2,6 +2,7 @@
 import { useEffect, useState } from 'react';
 import useSession from '../shared/useSession.js';
 import PageShell from '../shared/PageShell.jsx';
+import { getPlayerByKey } from '../../../js/data/playerCatalog.js';
 import apiService from '../../../services/ApiService.js';
 
 export default function ProfilePage() {
@@ -10,15 +11,15 @@ export default function ProfilePage() {
   const [purchases, setPurchases] = useState([]);
   const [loading, setLoading] = useState(true);
   const [showAvatarModal, setShowAvatarModal] = useState(false);
-  const [selectedAvatar, setSelectedAvatar] = useState('🐐');
-  const [tempAvatar, setTempAvatar] = useState('🐐');
+  const [selectedAvatar, setSelectedAvatar] = useState('👤');
+  const [tempAvatar, setTempAvatar] = useState('👤');
   const [equippedItems, setEquippedItems] = useState({});
 
   useEffect(() => {
     if (typeof window !== 'undefined') {
       const saved = localStorage.getItem('ft26_equipped_items');
       if (saved) {
-        try { setEquippedItems(JSON.parse(saved)); } catch (e) {}
+        try { setEquippedItems(JSON.parse(saved)); } catch (e) { }
       }
     }
   }, []);
@@ -59,16 +60,12 @@ export default function ProfilePage() {
   const LEVELS = generateLevels();
 
   const AVATAR_OPTIONS = [
-    { type: 'emoji', value: '🐐', name: 'Keçi' },
-    { type: 'emoji', value: '🦁', name: 'Aslan' },
-    { type: 'emoji', value: '🐯', name: 'Kaplan' },
-    { type: 'emoji', value: '🦅', name: 'Kartal' },
+    { type: 'emoji', value: '⚽', name: 'Futbol' },
+    { type: 'emoji', value: '🏆', name: 'Kupa' },
+    { type: 'emoji', value: '🎯', name: 'Hedef' },
+    { type: 'emoji', value: '⚡', name: 'Hız' },
     { type: 'emoji', value: '👑', name: 'Kral' },
-    { type: 'emoji', value: '👤', name: 'Varsayılan' },
-    { type: 'image', value: '/assets/messi.png', name: 'Messi' },
-    { type: 'image', value: '/assets/ronaldo.png', name: 'Ronaldo' },
-    { type: 'image', value: '/assets/haaland.png', name: 'Haaland' },
-    { type: 'image', value: '/assets/mbappe.png', name: 'Mbappe' }
+    { type: 'emoji', value: '👤', name: 'Varsayılan' }
   ];
 
   const isImageAvatar = (avatar) => {
@@ -197,8 +194,8 @@ export default function ProfilePage() {
   useEffect(() => {
     if (sessionUser) {
       setUser(sessionUser);
-      setSelectedAvatar(sessionUser.avatar || '🐐');
-      setTempAvatar(sessionUser.avatar || '🐐');
+      setSelectedAvatar(sessionUser.avatar || '👤');
+      setTempAvatar(sessionUser.avatar || '👤');
     }
   }, [sessionUser]);
 
@@ -212,14 +209,39 @@ export default function ProfilePage() {
           const meRes = await apiService.getMe();
           if (meRes && !meRes.error) {
             setUser(meRes);
-            setSelectedAvatar(meRes.avatar || '🐐');
-            setTempAvatar(meRes.avatar || '🐐');
+            setSelectedAvatar(meRes.avatar || '👤');
+            setTempAvatar(meRes.avatar || '👤');
           }
-          
-          const purchasesRes = await apiService.getMyPurchases();
-          if (Array.isArray(purchasesRes)) {
-            setPurchases(purchasesRes);
-          }
+
+          const [purchasesRes, entitlementsRes] = await Promise.all([
+            apiService.getMyPurchases(),
+            apiService.getCharacterEntitlements()
+          ]);
+          // Futbolcular character_entitlements üzerinden doğru görsel ve bilgilerle listelendiği için
+          // purchases tablosundaki ham 'Player' kayıtlarını filtreleyerek çift görünümü engelliyoruz.
+          const rawItems = Array.isArray(purchasesRes) ? purchasesRes : [];
+          const ownedItems = rawItems.filter(p => {
+            const type = p.store_items?.type || p.item_type;
+            const sku = p.store_items?.sku || p.sku || '';
+            return type !== 'Player' && !sku.startsWith('player_');
+          });
+
+          const ownedCharacters = Array.isArray(entitlementsRes)
+            ? entitlementsRes.map(entitlement => {
+              const player = getPlayerByKey(entitlement.character_key);
+              if (!player) return null;
+              return {
+                id: `character-${player.key}`,
+                item_id: `character-${player.key}`,
+                item_name: player.name,
+                item_type: 'Futbolcu',
+                character_key: player.key,
+                character_image: player.refImage,
+                purchased_at: entitlement.granted_at
+              };
+            }).filter(Boolean)
+            : [];
+          setPurchases([...ownedItems, ...ownedCharacters]);
         } catch (e) {
           console.error("Profil yükleme hatası:", e);
         }
@@ -249,365 +271,370 @@ export default function ProfilePage() {
 
   return (
     <PageShell activePage="profile" stats={stats} t={t} mounted={mounted}>
-        <div className="menu-dynamic-screen">
-          <div className="dynamic-screen-header" style={{display: 'flex', alignItems: 'center', gap: '16px', borderBottom: '2px solid rgba(41, 182, 246, 0.3)'}}>
-            <button className="btn-mode-back" onClick={() => {window.location.href='/'}} style={{margin: '0', padding: '6px 12px', fontSize: '12px'}}>← {t.back}</button>
-            <span style={{ textShadow: '0 0 10px rgba(41, 182, 246, 0.4)' }}>{t.profile_title}</span>
-          </div>
-          <div className="dynamic-screen-body" style={{marginTop: '20px'}}>
-            {loading ? (
-              <div style={{color: '#fff', textAlign: 'center', padding: '40px'}}>{t.loading}</div>
-            ) : !isLoggedIn ? (
-              <div style={{color: '#aaa', textAlign: 'center', padding: '40px'}}>{t.profile_login_required}</div>
-            ) : (
+      <div className="menu-dynamic-screen">
+        <div className="dynamic-screen-header" style={{ display: 'flex', alignItems: 'center', gap: '16px', borderBottom: '2px solid rgba(41, 182, 246, 0.3)' }}>
+          <button className="btn-mode-back" onClick={() => { window.location.href = '/' }} style={{ margin: '0', padding: '6px 12px', fontSize: '12px' }}>← {t.back}</button>
+          <span style={{ textShadow: '0 0 10px rgba(41, 182, 246, 0.4)' }}>{t.profile_title}</span>
+        </div>
+        <div className="dynamic-screen-body" style={{ marginTop: '20px' }}>
+          {loading ? (
+            <div style={{ color: '#fff', textAlign: 'center', padding: '40px' }}>{t.loading}</div>
+          ) : !isLoggedIn ? (
+            <div style={{ color: '#aaa', textAlign: 'center', padding: '40px' }}>{t.profile_login_required}</div>
+          ) : (
+            <div style={{
+              display: 'grid',
+              gridTemplateColumns: '320px 1fr',
+              gap: '24px',
+              color: '#fff'
+            }}>
+              {/* Sol Kısım: Kart ve Avatar (VALORANT tarzı premium kart) */}
               <div style={{
-                display: 'grid',
-                gridTemplateColumns: '320px 1fr',
-                gap: '24px',
-                color: '#fff'
+                background: 'linear-gradient(145deg, rgba(20, 24, 33, 0.9) 0%, rgba(10, 12, 17, 0.95) 100%)',
+                border: '1px solid rgba(41, 182, 246, 0.3)',
+                boxShadow: '0 8px 32px rgba(0, 0, 0, 0.5), inset 0 1px 0 rgba(255,255,255,0.05)',
+                borderRadius: '16px',
+                padding: '30px 24px',
+                display: 'flex',
+                flexDirection: 'column',
+                alignItems: 'center',
+                position: 'relative',
+                overflow: 'hidden'
               }}>
-                {/* Sol Kısım: Kart ve Avatar (VALORANT tarzı premium kart) */}
+                {/* Dekoratif Gradient Çizgiler */}
                 <div style={{
-                  background: 'linear-gradient(145deg, rgba(20, 24, 33, 0.9) 0%, rgba(10, 12, 17, 0.95) 100%)',
-                  border: '1px solid rgba(41, 182, 246, 0.3)',
-                  boxShadow: '0 8px 32px rgba(0, 0, 0, 0.5), inset 0 1px 0 rgba(255,255,255,0.05)',
-                  borderRadius: '16px',
-                  padding: '30px 24px',
-                  display: 'flex',
-                  flexDirection: 'column',
-                  alignItems: 'center',
+                  position: 'absolute',
+                  top: '0',
+                  left: '0',
+                  width: '100%',
+                  height: '4px',
+                  background: 'linear-gradient(90deg, #29b6f6, #ff7043)'
+                }}></div>
+
+                {/* Avatar Halkası */}
+                <div style={{
                   position: 'relative',
-                  overflow: 'hidden'
+                  width: '120px',
+                  height: '120px',
+                  marginBottom: '20px',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center'
                 }}>
-                  {/* Dekoratif Gradient Çizgiler */}
                   <div style={{
                     position: 'absolute',
-                    top: '0',
-                    left: '0',
-                    width: '100%',
-                    height: '4px',
-                    background: 'linear-gradient(90deg, #29b6f6, #ff7043)'
-                  }}></div>
-
-                  {/* Avatar Halkası */}
-                  <div style={{
-                    position: 'relative',
-                    width: '120px',
-                    height: '120px',
-                    marginBottom: '20px',
-                    display: 'flex',
-                    alignItems: 'center',
-                    justifyContent: 'center'
+                    inset: '0',
+                    borderRadius: '50%',
+                    padding: '4px',
+                    background: 'linear-gradient(135deg, #29b6f6, #ff7043)',
+                    boxShadow: '0 0 20px rgba(41, 182, 246, 0.4)',
+                    animation: 'spin 10s linear infinite'
                   }}>
-                    <div style={{
-                      position: 'absolute',
-                      inset: '0',
-                      borderRadius: '50%',
-                      padding: '4px',
-                      background: 'linear-gradient(135deg, #29b6f6, #ff7043)',
-                      boxShadow: '0 0 20px rgba(41, 182, 246, 0.4)',
-                      animation: 'spin 10s linear infinite'
-                    }}>
-                      <div style={{
-                        width: '100%',
-                        height: '100%',
-                        borderRadius: '50%',
-                        background: '#0d1117'
-                      }}></div>
-                    </div>
-                    <div style={{
-                      zIndex: 2,
-                      width: '100px',
-                      height: '100px',
-                      borderRadius: '50%',
-                      overflow: 'hidden',
-                      display: 'flex',
-                      alignItems: 'center',
-                      justifyContent: 'center',
-                      background: '#0d1117'
-                    }}>
-                      {isImageAvatar(selectedAvatar) ? (
-                        <img src={selectedAvatar} alt="Avatar" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
-                      ) : (
-                        <span style={{ fontSize: '50px' }}>{selectedAvatar}</span>
-                      )}
-                    </div>
-                  </div>
-
-                  <button onClick={() => { setTempAvatar(selectedAvatar); setShowAvatarModal(true); }} style={{
-                    background: 'rgba(41, 182, 246, 0.15)',
-                    border: '1px solid rgba(41, 182, 246, 0.3)',
-                    color: '#29b6f6',
-                    padding: '6px 16px',
-                    borderRadius: '20px',
-                    fontSize: '12px',
-                    fontWeight: '700',
-                    cursor: 'pointer',
-                    marginTop: '-10px',
-                    marginBottom: '15px',
-                    transition: 'all 0.2s',
-                    outline: 'none'
-                  }} className="avatar-change-btn">
-                    Avatar Değiştir
-                  </button>
-
-                  <h2 style={{
-                    fontSize: '24px',
-                    fontWeight: '800',
-                    margin: '0 0 4px 0',
-                    background: 'linear-gradient(135deg, #29b6f6, #00e5ff)',
-                    backgroundClip: 'text',
-                    WebkitBackgroundClip: 'text',
-                    WebkitTextFillColor: 'transparent',
-                    textShadow: '0 2px 10px rgba(41, 182, 246, 0.2)'
-                  }}>{user?.username}</h2>
-                  <p style={{fontSize: '13px', color: '#8892b0', margin: '0 0 24px 0', fontWeight: '500'}}>{user?.email}</p>
-                  
-                  {/* Seviye ve XP Bilgisi */}
-                  <div style={{
-                    width: '100%',
-                    background: 'rgba(0, 0, 0, 0.25)',
-                    border: '1px solid rgba(255,255,255,0.03)',
-                    borderRadius: '12px',
-                    padding: '16px',
-                    boxSizing: 'border-box'
-                  }}>
-                    <div style={{display: 'flex', justifyContent: 'space-between', marginBottom: '10px', fontSize: '13px', fontWeight: 'bold'}}>
-                      <span style={{color: '#29b6f6'}}>{t.level_display.replace('{level}', currentLevel).toUpperCase()}</span>
-                      <span style={{color: '#ff7043'}}>{currentXp} XP</span>
-                    </div>
                     <div style={{
                       width: '100%',
-                      height: '8px',
-                      background: 'rgba(255, 255, 255, 0.05)',
-                      borderRadius: '4px',
-                      overflow: 'hidden',
-                      boxShadow: 'inset 0 1px 3px rgba(0,0,0,0.5)'
-                    }}>
-                      <div style={{
-                        width: `${progressPercent}%`,
-                        height: '100%',
-                        background: 'linear-gradient(90deg, #29b6f6, #00e5ff)',
-                        borderRadius: '4px',
-                        boxShadow: '0 0 8px rgba(0,229,255,0.5)'
-                      }}></div>
-                    </div>
-                    <div style={{fontSize: '11px', color: '#8892b0', marginTop: '8px', textAlign: 'right', fontWeight: '500'}}>
-                      {t.profile_next_level} <span style={{color: '#fff'}}>{nextLevelXp - currentXp} XP</span>
-                    </div>
+                      height: '100%',
+                      borderRadius: '50%',
+                      background: '#0d1117'
+                    }}></div>
                   </div>
-                </div>
-
-                {/* Sağ Kısım: Detaylı İstatistikler & Eşyalar */}
-                <div style={{
-                  display: 'flex',
-                  flexDirection: 'column',
-                  gap: '20px',
-                  minWidth: '0'
-                }}>
-                  {/* İstatistikler Paneli */}
                   <div style={{
-                    background: 'linear-gradient(145deg, rgba(20, 24, 33, 0.85) 0%, rgba(13, 16, 23, 0.9) 100%)',
-                    border: '1px solid rgba(255, 255, 255, 0.08)',
-                    borderRadius: '16px',
-                    padding: '24px',
-                    boxShadow: '0 8px 32px rgba(0, 0, 0, 0.4)'
+                    zIndex: 2,
+                    width: '100px',
+                    height: '100px',
+                    borderRadius: '50%',
+                    overflow: 'hidden',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    background: '#0d1117'
                   }}>
-                    <h3 style={{
-                      fontSize: '18px',
-                      fontWeight: '800',
-                      margin: '0 0 20px 0',
-                      borderBottom: '1px solid rgba(255,255,255,0.08)',
-                      paddingBottom: '10px',
-                      color: '#29b6f6',
-                      letterSpacing: '1px',
-                      display: 'flex',
-                      alignItems: 'center',
-                      gap: '8px'
-                    }}>
-                      {t.profile_club_stats}
-                    </h3>
-                    
-                    <div style={{
-                      display: 'grid',
-                      gridTemplateColumns: 'repeat(2, 1fr)',
-                      gap: '16px'
-                    }}>
-                      <div style={{
-                        background: 'rgba(46, 204, 113, 0.03)',
-                        border: '1px solid rgba(46, 204, 113, 0.1)',
-                        padding: '18px',
-                        borderRadius: '14px',
-                        boxShadow: 'inset 0 0 15px rgba(0,0,0,0.2)',
-                        transition: 'transform 0.2s',
-                        cursor: 'default'
-                      }}>
-                        <div style={{fontSize: '11px', color: '#8892b0', marginBottom: '6px', fontWeight: '600', letterSpacing: '0.5px'}}>{t.profile_total_earnings}</div>
-                        <div style={{fontSize: '24px', fontWeight: '800', color: '#2ecc71'}}>₺{(stats.total_earnings || 0).toLocaleString()}</div>
-                      </div>
-                      <div style={{
-                        background: 'rgba(46, 204, 113, 0.03)',
-                        border: '1px solid rgba(46, 204, 113, 0.1)',
-                        padding: '18px',
-                        borderRadius: '14px',
-                        boxShadow: 'inset 0 0 15px rgba(0,0,0,0.2)'
-                      }}>
-                        <div style={{fontSize: '11px', color: '#8892b0', marginBottom: '6px', fontWeight: '600', letterSpacing: '0.5px'}}>{t.profile_highest_money}</div>
-                        <div style={{fontSize: '24px', fontWeight: '800', color: '#2ecc71'}}>
-                          ₺{((Number(stats.total_earnings || 0)) + purchases.reduce((acc, p) => acc + Number(p.store_items?.price || p.price || 0), 0)).toLocaleString()}
-                        </div>
-                      </div>
-                      <div style={{
-                        background: 'rgba(245, 208, 97, 0.03)',
-                        border: '1px solid rgba(245, 208, 97, 0.1)',
-                        padding: '18px',
-                        borderRadius: '14px',
-                        boxShadow: 'inset 0 0 15px rgba(0,0,0,0.2)'
-                      }}>
-                        <div style={{fontSize: '11px', color: '#8892b0', marginBottom: '6px', fontWeight: '600', letterSpacing: '0.5px'}}>{t.profile_wins}</div>
-                        <div style={{fontSize: '24px', fontWeight: '800', color: '#f5d061'}}>{stats.wins || 0}</div>
-                      </div>
-                      <div style={{
-                        background: 'rgba(255,255,255,0.02)',
-                        border: '1px solid rgba(255,255,255,0.05)',
-                        padding: '18px',
-                        borderRadius: '14px'
-                      }}>
-                        <div style={{fontSize: '11px', color: '#8892b0', marginBottom: '6px', fontWeight: '600', letterSpacing: '0.5px'}}>{t.profile_games_played}</div>
-                        <div style={{fontSize: '24px', fontWeight: '800', color: '#fff'}}>{stats.games_played || 0}</div>
-                      </div>
-                    </div>
-                  </div>
-
-                  {/* Sahip Olunan Eşyalar */}
-                  <div style={{
-                    background: 'linear-gradient(145deg, rgba(20, 24, 33, 0.85) 0%, rgba(13, 16, 23, 0.9) 100%)',
-                    border: '1px solid rgba(255, 255, 255, 0.08)',
-                    borderRadius: '16px',
-                    padding: '24px',
-                    boxShadow: '0 8px 32px rgba(0, 0, 0, 0.4)'
-                  }}>
-                    <h3 style={{
-                      fontSize: '18px',
-                      fontWeight: '800',
-                      margin: '0 0 16px 0',
-                      borderBottom: '1px solid rgba(255,255,255,0.08)',
-                      paddingBottom: '10px',
-                      color: '#29b6f6',
-                      letterSpacing: '1px',
-                      display: 'flex',
-                      alignItems: 'center',
-                      gap: '8px'
-                    }}>
-                      {t.profile_owned_items}
-                    </h3>
-                    {purchases.length === 0 ? (
-                      <div style={{color: '#8892b0', fontSize: '13px', textAlign: 'center', padding: '20px 0'}}>
-                        {t.profile_no_owned_items}
-                      </div>
+                    {isImageAvatar(selectedAvatar) ? (
+                      <img src={selectedAvatar} alt="Avatar" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
                     ) : (
-                      <div style={{
-                        display: 'grid',
-                        gridTemplateColumns: 'repeat(auto-fill, minmax(140px, 1fr))',
-                        gap: '16px'
-                      }}>
-                        {purchases.map((p, idx) => {
-                          const itemId = p.item_id || p.id || p.store_items?.id || `item-${idx}`;
-                          const isEquipped = !!equippedItems[itemId];
-                          const itemName = p.store_items?.name || p.item_name || 'Özel Eşya';
-                          const itemType = p.store_items?.type || 'Eşya';
-                          
-                          const getItemImage = (name) => {
-                            if (!name) return null;
-                            const n = name.toLowerCase();
-                            if (n.includes('piyon') || n.includes('pawn') || n.includes('kutu') || n.includes('box')) return '/assets/store_gold_pawn_box.png';
-                            if (n.includes('stadyum') || n.includes('stadium') || n.includes('tema') || n.includes('theme')) return '/assets/store_stadium_theme.png';
-                            if (n.includes('zar') || n.includes('dice') || n.includes('elmas') || n.includes('diamond')) return '/assets/store_diamond_dice.png';
-                            if (n.includes('vip') || n.includes('rozet') || n.includes('badge')) return '/assets/store_vip_badge.png';
-                            return null;
-                          };
-                          const imgUrl = getItemImage(itemName);
-
-                          return (
-                            <div key={idx} style={{
-                              background: isEquipped 
-                                ? 'linear-gradient(145deg, rgba(46, 204, 113, 0.15) 0%, rgba(15, 35, 22, 0.65) 100%)' 
-                                : 'linear-gradient(145deg, rgba(20, 24, 33, 0.9) 0%, rgba(10, 12, 17, 0.95) 100%)',
-                              border: isEquipped ? '1px solid #2ecc71' : '1px solid rgba(41, 182, 246, 0.25)',
-                              padding: '16px 12px',
-                              borderRadius: '16px',
-                              display: 'flex',
-                              flexDirection: 'column',
-                              alignItems: 'center',
-                              justifyContent: 'space-between',
-                              boxShadow: isEquipped ? '0 0 20px rgba(46, 204, 113, 0.25)' : '0 6px 20px rgba(0, 0, 0, 0.4)',
-                              transition: 'all 0.25s ease'
-                            }}>
-                              <div style={{
-                                width: '100%',
-                                aspectRatio: '1/1',
-                                maxWidth: '105px',
-                                maxHeight: '105px',
-                                borderRadius: '12px',
-                                overflow: 'hidden',
-                                background: '#0d1117',
-                                border: isEquipped ? '1px solid rgba(46, 204, 113, 0.4)' : '1px solid rgba(255, 255, 255, 0.08)',
-                                boxShadow: 'inset 0 0 15px rgba(0,0,0,0.6)',
-                                display: 'flex',
-                                alignItems: 'center',
-                                justifyContent: 'center',
-                                marginBottom: '12px'
-                              }}>
-                                {imgUrl ? (
-                                  <img src={imgUrl} alt={itemName} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
-                                ) : (
-                                  <span style={{ fontSize: '36px' }}>🎁</span>
-                                )}
-                              </div>
-
-                              <div style={{ textAlign: 'center', width: '100%', marginBottom: '12px' }}>
-                                <div style={{ 
-                                  color: isEquipped ? '#2ecc71' : '#00e5ff', 
-                                  fontWeight: '700', 
-                                  fontSize: '13px',
-                                  lineHeight: '1.3',
-                                  marginBottom: '4px'
-                                }}>
-                                  {itemName}
-                                </div>
-                                <div style={{ fontSize: '11px', color: '#8892b0', fontWeight: '500' }}>{itemType}</div>
-                              </div>
-
-                              <button 
-                                onClick={() => toggleEquip(itemId)}
-                                style={{
-                                  width: '100%',
-                                  background: isEquipped ? 'rgba(46, 204, 113, 0.2)' : 'rgba(41, 182, 246, 0.15)',
-                                  border: isEquipped ? '1px solid #2ecc71' : '1px solid #29b6f6',
-                                  color: isEquipped ? '#2ecc71' : '#29b6f6',
-                                  padding: '8px 0',
-                                  borderRadius: '20px',
-                                  fontSize: '11px',
-                                  fontWeight: '700',
-                                  cursor: 'pointer',
-                                  transition: 'all 0.2s',
-                                  outline: 'none',
-                                  boxShadow: isEquipped ? '0 0 10px rgba(46, 204, 113, 0.2)' : 'none'
-                                }}
-                              >
-                                {isEquipped ? '✓ Kuşanıldı' : 'Kuşan'}
-                              </button>
-                            </div>
-                          );
-                        })}
-                      </div>
+                      <span style={{ fontSize: '50px' }}>{selectedAvatar}</span>
                     )}
                   </div>
                 </div>
+
+                <button onClick={() => { setTempAvatar(selectedAvatar); setShowAvatarModal(true); }} style={{
+                  background: 'rgba(41, 182, 246, 0.15)',
+                  border: '1px solid rgba(41, 182, 246, 0.3)',
+                  color: '#29b6f6',
+                  padding: '6px 16px',
+                  borderRadius: '20px',
+                  fontSize: '12px',
+                  fontWeight: '700',
+                  cursor: 'pointer',
+                  marginTop: '-10px',
+                  marginBottom: '15px',
+                  transition: 'all 0.2s',
+                  outline: 'none'
+                }} className="avatar-change-btn">
+                  Avatar Değiştir
+                </button>
+
+                <h2 style={{
+                  fontSize: '24px',
+                  fontWeight: '800',
+                  margin: '0 0 4px 0',
+                  background: 'linear-gradient(135deg, #29b6f6, #00e5ff)',
+                  backgroundClip: 'text',
+                  WebkitBackgroundClip: 'text',
+                  WebkitTextFillColor: 'transparent',
+                  textShadow: '0 2px 10px rgba(41, 182, 246, 0.2)'
+                }}>{user?.username}</h2>
+                <p style={{ fontSize: '13px', color: '#8892b0', margin: '0 0 24px 0', fontWeight: '500' }}>{user?.email}</p>
+
+                {/* Seviye ve XP Bilgisi */}
+                <div style={{
+                  width: '100%',
+                  background: 'rgba(0, 0, 0, 0.25)',
+                  border: '1px solid rgba(255,255,255,0.03)',
+                  borderRadius: '12px',
+                  padding: '16px',
+                  boxSizing: 'border-box'
+                }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '10px', fontSize: '13px', fontWeight: 'bold' }}>
+                    <span style={{ color: '#29b6f6' }}>{t.level_display.replace('{level}', currentLevel).toUpperCase()}</span>
+                    <span style={{ color: '#ff7043' }}>{currentXp} XP</span>
+                  </div>
+                  <div style={{
+                    width: '100%',
+                    height: '8px',
+                    background: 'rgba(255, 255, 255, 0.05)',
+                    borderRadius: '4px',
+                    overflow: 'hidden',
+                    boxShadow: 'inset 0 1px 3px rgba(0,0,0,0.5)'
+                  }}>
+                    <div style={{
+                      width: `${progressPercent}%`,
+                      height: '100%',
+                      background: 'linear-gradient(90deg, #29b6f6, #00e5ff)',
+                      borderRadius: '4px',
+                      boxShadow: '0 0 8px rgba(0,229,255,0.5)'
+                    }}></div>
+                  </div>
+                  <div style={{ fontSize: '11px', color: '#8892b0', marginTop: '8px', textAlign: 'right', fontWeight: '500' }}>
+                    {t.profile_next_level} <span style={{ color: '#fff' }}>{nextLevelXp - currentXp} XP</span>
+                  </div>
+                </div>
               </div>
-            )}
-          </div>
+
+              {/* Sağ Kısım: Detaylı İstatistikler & Eşyalar */}
+              <div style={{
+                display: 'flex',
+                flexDirection: 'column',
+                gap: '20px',
+                minWidth: '0'
+              }}>
+                {/* İstatistikler Paneli */}
+                <div style={{
+                  background: 'linear-gradient(145deg, rgba(20, 24, 33, 0.85) 0%, rgba(13, 16, 23, 0.9) 100%)',
+                  border: '1px solid rgba(255, 255, 255, 0.08)',
+                  borderRadius: '16px',
+                  padding: '24px',
+                  boxShadow: '0 8px 32px rgba(0, 0, 0, 0.4)'
+                }}>
+                  <h3 style={{
+                    fontSize: '18px',
+                    fontWeight: '800',
+                    margin: '0 0 20px 0',
+                    borderBottom: '1px solid rgba(255,255,255,0.08)',
+                    paddingBottom: '10px',
+                    color: '#29b6f6',
+                    letterSpacing: '1px',
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '8px'
+                  }}>
+                    {t.profile_club_stats}
+                  </h3>
+
+                  <div style={{
+                    display: 'grid',
+                    gridTemplateColumns: 'repeat(2, 1fr)',
+                    gap: '16px'
+                  }}>
+                    <div style={{
+                      background: 'rgba(46, 204, 113, 0.03)',
+                      border: '1px solid rgba(46, 204, 113, 0.1)',
+                      padding: '18px',
+                      borderRadius: '14px',
+                      boxShadow: 'inset 0 0 15px rgba(0,0,0,0.2)',
+                      transition: 'transform 0.2s',
+                      cursor: 'default'
+                    }}>
+                      <div style={{ fontSize: '11px', color: '#8892b0', marginBottom: '6px', fontWeight: '600', letterSpacing: '0.5px' }}>{t.profile_total_earnings}</div>
+                      <div style={{ fontSize: '24px', fontWeight: '800', color: '#2ecc71' }}>₺{(stats.total_earnings || 0).toLocaleString()}</div>
+                    </div>
+                    <div style={{
+                      background: 'rgba(46, 204, 113, 0.03)',
+                      border: '1px solid rgba(46, 204, 113, 0.1)',
+                      padding: '18px',
+                      borderRadius: '14px',
+                      boxShadow: 'inset 0 0 15px rgba(0,0,0,0.2)'
+                    }}>
+                      <div style={{ fontSize: '11px', color: '#8892b0', marginBottom: '6px', fontWeight: '600', letterSpacing: '0.5px' }}>{t.profile_highest_money}</div>
+                      <div style={{ fontSize: '24px', fontWeight: '800', color: '#2ecc71' }}>
+                        ₺{((Number(stats.total_earnings || 0)) + purchases.reduce((acc, p) => acc + Number(p.store_items?.price || p.price || 0), 0)).toLocaleString()}
+                      </div>
+                    </div>
+                    <div style={{
+                      background: 'rgba(245, 208, 97, 0.03)',
+                      border: '1px solid rgba(245, 208, 97, 0.1)',
+                      padding: '18px',
+                      borderRadius: '14px',
+                      boxShadow: 'inset 0 0 15px rgba(0,0,0,0.2)'
+                    }}>
+                      <div style={{ fontSize: '11px', color: '#8892b0', marginBottom: '6px', fontWeight: '600', letterSpacing: '0.5px' }}>{t.profile_wins}</div>
+                      <div style={{ fontSize: '24px', fontWeight: '800', color: '#f5d061' }}>{stats.wins || 0}</div>
+                    </div>
+                    <div style={{
+                      background: 'rgba(255,255,255,0.02)',
+                      border: '1px solid rgba(255,255,255,0.05)',
+                      padding: '18px',
+                      borderRadius: '14px'
+                    }}>
+                      <div style={{ fontSize: '11px', color: '#8892b0', marginBottom: '6px', fontWeight: '600', letterSpacing: '0.5px' }}>{t.profile_games_played}</div>
+                      <div style={{ fontSize: '24px', fontWeight: '800', color: '#fff' }}>{stats.games_played || 0}</div>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Sahip Olunan Eşyalar */}
+                <div style={{
+                  background: 'linear-gradient(145deg, rgba(20, 24, 33, 0.85) 0%, rgba(13, 16, 23, 0.9) 100%)',
+                  border: '1px solid rgba(255, 255, 255, 0.08)',
+                  borderRadius: '16px',
+                  padding: '24px',
+                  boxShadow: '0 8px 32px rgba(0, 0, 0, 0.4)'
+                }}>
+                  <h3 style={{
+                    fontSize: '18px',
+                    fontWeight: '800',
+                    margin: '0 0 16px 0',
+                    borderBottom: '1px solid rgba(255,255,255,0.08)',
+                    paddingBottom: '10px',
+                    color: '#29b6f6',
+                    letterSpacing: '1px',
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '8px'
+                  }}>
+                    {t.profile_owned_items}
+                  </h3>
+                  {purchases.length === 0 ? (
+                    <div style={{ color: '#8892b0', fontSize: '13px', textAlign: 'center', padding: '20px 0' }}>
+                      {t.profile_no_owned_items}
+                    </div>
+                  ) : (
+                    <div style={{
+                      display: 'grid',
+                      gridTemplateColumns: 'repeat(auto-fill, minmax(140px, 1fr))',
+                      gap: '16px'
+                    }}>
+                      {purchases.map((p, idx) => {
+                        const itemId = p.item_id || p.id || p.store_items?.id || `item-${idx}`;
+                        const isEquipped = !!equippedItems[itemId];
+                        const itemName = p.store_items?.name || p.item_name || 'Özel Eşya';
+                        const rawType = p.store_items?.type || p.item_type || 'Eşya';
+                        const localizedType = rawType === 'Kutu' || rawType === 'Box' ? t.store_item_box :
+                                              rawType === 'Tema' || rawType === 'Theme' ? t.store_item_theme :
+                                              rawType === 'Zar' || rawType === 'Dice' ? t.store_item_dice :
+                                              rawType === 'Rozet' || rawType === 'Badge' ? t.store_item_badge :
+                                              rawType === 'Player' || rawType === 'Futbolcu' ? (language === 'English' ? 'Player' : 'Futbolcu') : rawType;
+
+                        const getItemImage = (name) => {
+                          if (!name) return null;
+                          const n = name.toLowerCase();
+                          if (n.includes('piyon') || n.includes('pawn') || n.includes('kutu') || n.includes('box')) return '/assets/store_gold_pawn_box.png';
+                          if (n.includes('stadyum') || n.includes('stadium') || n.includes('tema') || n.includes('theme')) return '/assets/store_stadium_theme.png';
+                          if (n.includes('zar') || n.includes('dice') || n.includes('elmas') || n.includes('diamond')) return '/assets/store_diamond_dice.png';
+                          if (n.includes('vip') || n.includes('rozet') || n.includes('badge')) return '/assets/store_vip_badge.png';
+                          return null;
+                        };
+                        const imgUrl = p.character_image || getItemImage(itemName);
+
+                        return (
+                          <div key={idx} style={{
+                            background: isEquipped
+                              ? 'linear-gradient(145deg, rgba(46, 204, 113, 0.15) 0%, rgba(15, 35, 22, 0.65) 100%)'
+                              : 'linear-gradient(145deg, rgba(20, 24, 33, 0.9) 0%, rgba(10, 12, 17, 0.95) 100%)',
+                            border: isEquipped ? '1px solid #2ecc71' : '1px solid rgba(41, 182, 246, 0.25)',
+                            padding: '16px 12px',
+                            borderRadius: '16px',
+                            display: 'flex',
+                            flexDirection: 'column',
+                            alignItems: 'center',
+                            justifyContent: 'space-between',
+                            boxShadow: isEquipped ? '0 0 20px rgba(46, 204, 113, 0.25)' : '0 6px 20px rgba(0, 0, 0, 0.4)',
+                            transition: 'all 0.25s ease'
+                          }}>
+                            <div style={{
+                              width: '100%',
+                              aspectRatio: '1/1',
+                              maxWidth: '120px',
+                              maxHeight: '120px',
+                              borderRadius: '12px',
+                              overflow: 'hidden',
+                              background: '#0d1117',
+                              border: isEquipped ? '1px solid rgba(46, 204, 113, 0.4)' : '1px solid rgba(255, 255, 255, 0.08)',
+                              boxShadow: 'inset 0 0 15px rgba(0,0,0,0.6)',
+                              display: 'flex',
+                              alignItems: 'center',
+                              justifyContent: 'center',
+                              marginBottom: '12px'
+                            }}>
+                              {imgUrl ? (
+                                <img src={imgUrl} alt={itemName} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                              ) : (
+                                <span style={{ fontSize: '36px' }}>🎁</span>
+                              )}
+                            </div>
+
+                            <div style={{ textAlign: 'center', width: '100%', marginBottom: '12px' }}>
+                              <div style={{
+                                color: isEquipped ? '#2ecc71' : '#00e5ff',
+                                fontWeight: '700',
+                                fontSize: '13px',
+                                lineHeight: '1.3',
+                                marginBottom: '4px'
+                              }}>
+                                {itemName}
+                              </div>
+                              <div style={{ fontSize: '11px', color: '#8892b0', fontWeight: '500' }}>{localizedType}</div>
+                            </div>
+
+                            <button
+                              onClick={() => toggleEquip(itemId)}
+                              style={{
+                                width: '100%',
+                                background: isEquipped ? 'rgba(46, 204, 113, 0.2)' : 'rgba(41, 182, 246, 0.15)',
+                                border: isEquipped ? '1px solid #2ecc71' : '1px solid #29b6f6',
+                                color: isEquipped ? '#2ecc71' : '#29b6f6',
+                                padding: '8px 0',
+                                borderRadius: '20px',
+                                fontSize: '11px',
+                                fontWeight: '700',
+                                cursor: 'pointer',
+                                transition: 'all 0.2s',
+                                outline: 'none',
+                                boxShadow: isEquipped ? '0 0 10px rgba(46, 204, 113, 0.2)' : 'none'
+                              }}
+                            >
+                              {isEquipped ? '✓ Kuşanıldı' : 'Kuşan'}
+                            </button>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  )}
+                </div>
+              </div>
+            </div>
+          )}
         </div>
+      </div>
       {showAvatarModal && (
         <div className="modal-backdrop" style={{ zIndex: 1000 }}>
           <div className="modal" style={{ maxWidth: '400px' }}>
@@ -617,8 +644,8 @@ export default function ProfilePage() {
             <div className="modal-body" style={{ padding: '20px' }}>
               <div style={{ display: 'grid', gridTemplateColumns: 'repeat(5, 1fr)', gap: '12px', justifyItems: 'center' }}>
                 {AVATAR_OPTIONS.map((opt, index) => (
-                  <div 
-                    key={index} 
+                  <div
+                    key={index}
                     onClick={() => setTempAvatar(opt.value)}
                     style={{
                       border: tempAvatar === opt.value ? '2px solid #29b6f6' : '1px solid rgba(255,255,255,0.1)',
@@ -694,7 +721,7 @@ export default function ProfilePage() {
               <div className="modal-city">FOTOĞRAFI KIRP & KONUMLANDIR</div>
             </div>
 
-            <div 
+            <div
               onMouseDown={handleMouseDown}
               onMouseMove={handleMouseMove}
               onMouseUp={handleMouseUp}
@@ -727,8 +754,8 @@ export default function ProfilePage() {
               {(() => {
                 const CONTAINER_SIZE = 280;
                 const MASK_SIZE = 220;
-                const baseScale = cropImgSize.width && cropImgSize.height 
-                  ? Math.max(CONTAINER_SIZE / cropImgSize.width, CONTAINER_SIZE / cropImgSize.height) 
+                const baseScale = cropImgSize.width && cropImgSize.height
+                  ? Math.max(CONTAINER_SIZE / cropImgSize.width, CONTAINER_SIZE / cropImgSize.height)
                   : 1;
                 const dispW = cropImgSize.width ? cropImgSize.width * baseScale : CONTAINER_SIZE;
                 const dispH = cropImgSize.height ? cropImgSize.height * baseScale : CONTAINER_SIZE;
@@ -748,15 +775,15 @@ export default function ProfilePage() {
                 return (
                   <>
                     {/* Arka planda tam fotoğraf (Düşük Opaklık / Dimmed View) */}
-                    <img 
-                      src={cropImageSrc} 
-                      alt="Tam Fotoğraf" 
+                    <img
+                      src={cropImageSrc}
+                      alt="Tam Fotoğraf"
                       draggable={false}
                       style={{
                         ...imgStyle,
                         opacity: 0.35,
                         filter: 'brightness(0.7)'
-                      }} 
+                      }}
                     />
 
                     {/* Ortada dairesel profil resmi çerçevesi (Tam Netlik) */}
@@ -773,14 +800,14 @@ export default function ProfilePage() {
                       boxShadow: '0 0 20px rgba(41, 182, 246, 0.6), inset 0 0 10px rgba(0,0,0,0.5)',
                       pointerEvents: 'none'
                     }}>
-                      <img 
-                        src={cropImageSrc} 
-                        alt="Profil Resmi Kırpma" 
+                      <img
+                        src={cropImageSrc}
+                        alt="Profil Resmi Kırpma"
                         draggable={false}
                         style={{
                           ...imgStyle,
                           opacity: 1
-                        }} 
+                        }}
                       />
                     </div>
                   </>
@@ -790,12 +817,12 @@ export default function ProfilePage() {
 
             <div style={{ marginTop: '20px', display: 'flex', flexDirection: 'column', gap: '8px', alignItems: 'center' }}>
               <label style={{ fontSize: '12px', color: '#aaa' }}>Yakınlaştırma: {cropZoom.toFixed(1)}x</label>
-              <input 
-                type="range" 
-                min="1" 
-                max="3" 
-                step="0.05" 
-                value={cropZoom} 
+              <input
+                type="range"
+                min="1"
+                max="3"
+                step="0.05"
+                value={cropZoom}
                 onChange={(e) => {
                   const newZoom = parseFloat(e.target.value);
                   setCropZoom(newZoom);

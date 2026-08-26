@@ -66,6 +66,9 @@ SUPABASE_SERVICE_KEY=your-service-role-key
 JWT_SECRET=replace-with-a-long-random-secret
 CORS_ORIGIN=http://localhost:3000
 PORT=8000
+FRONTEND_URL=http://localhost:3000
+STRIPE_SECRET_KEY=sk_test_...
+STRIPE_WEBHOOK_SECRET=whsec_...
 ```
 
 ### Veritabanı
@@ -91,8 +94,15 @@ Schema şunları oluşturur:
 - `game_session_players`
 - `game_session_events`
 - `password_reset_tokens`
+- `character_entitlements`
+- `starter_character_claims`
+- `coin_ledger`
+- `coin_orders`
+- `coin_pack_catalog`
 
-Ayrıca başlangıç mağaza ürünlerini seed eder.
+Ayrıca futbolcu kataloğunu (Architect/King: 500 coin, Viking/Rocket/Wizard: 300 coin) ve coin paketlerini seed eder. Coin paketleri: 100 coin = 1,50 USD; 300 coin = 4 USD; 500 coin = 5 USD; 1000 coin = 8 USD. Coin yükleme için Stripe Checkout oturumu oluşturulur; coin yalnızca imzalı webhook ile başarılı ödeme sonrasında verilir.
+
+Meshy’den gelen ayrı oyuncu modelleri `frontend/public/assets/players/` altında standart adlarla tutulur: `architect.glb`, `king.glb`, `viking.glb`, `rocket.glb`, `wizard.glb`. Bu web dosyaları Draco ile optimize edilmiştir; orijinal büyük dosyalar `tools/blender/source-models/` altında saklanır. Web tarafındaki katalog bu yolları `frontend/js/data/playerCatalog.js` üzerinden kullanır.
 
 ### Frontend
 
@@ -135,6 +145,8 @@ cd frontend && npm run tauri dev
 - Kullanıcıya özel API uçları JWT token üzerinden çalışır; body ile gönderilen `user_id` güven kaynağı değildir.
 - Stats endpoint'i istemciden bakiye, XP veya galibiyet yazılmasına izin vermez; kalıcı istatistikler server-owned'dur.
 - Satın alma işlemlerinde bakiye ve ürün fiyatı tek RPC transaction'ında backend tarafından kontrol edilir.
+- Gerçek para ödemesinde kart bilgisi backend'e girmez; Stripe Checkout kullanılır. `checkout.session.completed` webhook imzası doğrulanmadan coin yüklenmez ve aynı oturum ikinci kez işlenemez.
+- Canlı ödeme için Stripe hesabı, ürün/ödeme ayarları ve `STRIPE_SECRET_KEY`/`STRIPE_WEBHOOK_SECRET` değerleri zorunludur; test anahtarlarıyla lokal Stripe CLI üzerinden denenmelidir.
 - API body boyutu 256 KB ile sınırlıdır; genel API, login ve şifre sıfırlama rate limit'leri aktiftir.
 - Supabase RLS politikaları service role API kullanımına göre sınırlandırılmıştır.
 - Tauri allowlist daraltılmıştır; yeni Tauri API ihtiyacı doğarsa sadece gereken izin açılmalıdır.

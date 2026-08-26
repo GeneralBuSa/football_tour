@@ -85,7 +85,7 @@ export function playLocalGame(options = {}) {
       // Piyon konumlarını güncelle
       if (window.update3DPawnsTargetPositions) window.update3DPawnsTargetPositions();
 
-      showNotif(sessionId ? 'Çevrimiçi Oyun Başladı! ⚽' : 'Oyun Başladı! Sıra Messi\'de ⚽');
+      showNotif(sessionId ? 'Çevrimiçi Oyun Başladı! ⚽' : `Oyun Başladı! Sıra ${PLAYERS[0]?.name || 'Oyuncu'}'de ⚽`);
 
       // Loading ekranını tekrar kapat
       const overlay = document.querySelector('.loading-transition-overlay');
@@ -104,7 +104,7 @@ export function playLocalGame(options = {}) {
 
     startTimer();
     if (window.update3DPawnsTargetPositions) window.update3DPawnsTargetPositions();
-    showNotif(sessionId ? 'Çevrimiçi Oyun Başladı! ⚽' : 'Oyun Başladı! Sıra Messi\'de ⚽');
+    showNotif(sessionId ? 'Çevrimiçi Oyun Başladı! ⚽' : `Oyun Başladı! Sıra ${PLAYERS[0]?.name || 'Oyuncu'}'de ⚽`);
   }
 }
 

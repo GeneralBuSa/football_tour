@@ -10,6 +10,7 @@ import lobbyRoutes from './routes/lobby.js';
 import friendsRoutes from './routes/friends.js';
 import savesRoutes from './routes/saves.js';
 import multiplayerRoutes from './routes/multiplayer.js';
+import paymentRoutes from './routes/payments.js';
 import { createRateLimiter, securityHeaders } from './middleware/security.js';
 
 dotenv.config();
@@ -26,7 +27,12 @@ app.use(cors({
   }
 }));
 app.use(securityHeaders);
-app.use(express.json({ limit: '256kb' }));
+app.use(express.json({
+  limit: '256kb',
+  verify(req, _res, buf) {
+    if (req.originalUrl === '/api/payments/webhook') req.rawBody = Buffer.from(buf);
+  }
+}));
 app.use('/api', createRateLimiter({ windowMs: 60 * 1000, max: 300 }));
 
 // Health check endpoint
@@ -44,6 +50,7 @@ app.use('/api/lobby', lobbyRoutes);
 app.use('/api/friends', friendsRoutes);
 app.use('/api/saves', savesRoutes);
 app.use('/api/multiplayer', multiplayerRoutes);
+app.use('/api/payments', paymentRoutes);
 
 // Global Error Handler
 app.use((err, req, res, next) => {

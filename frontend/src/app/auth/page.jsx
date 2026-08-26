@@ -72,7 +72,7 @@ export default function AuthPage() {
       setError('');
       const res = await apiService.login(username, password);
       if (res && res.token) {
-        window.location.href = '/';
+        window.location.href = '/starter';
       } else {
         setError(res?.error || (language === 'English' ? 'Failed to log in. Please check your credentials.' : 'Giriş yapılamadı. Bilgilerinizi kontrol edin.'));
       }
@@ -95,7 +95,7 @@ export default function AuthPage() {
       setError('');
       const res = await apiService.register(username, email, password);
       if (res && res.token) {
-        window.location.href = '/';
+        window.location.href = '/starter';
       } else {
         setError(res?.error || (language === 'English' ? 'Registration failed.' : 'Kayıt işlemi başarısız.'));
       }

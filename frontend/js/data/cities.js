@@ -50,8 +50,9 @@ export const SPECIAL_CELLS = [
 
 // Başlangıç oyuncu verileri
 export const DEFAULT_PLAYERS = [
-  { name: "Messi", avatar: "🐐", avatarImg: "assets/messi.png", color: "#29b6f6", money: 1000000, pos: 0, ownedProps: [], stadiums: {}, theme: "blue-theme" },
-  { name: "Ronaldo", avatar: "🦁", avatarImg: "assets/ronaldo.png", color: "#f57c00", money: 1000000, pos: 0, ownedProps: [], stadiums: {}, theme: "pink-theme" },
-  { name: "Mbappé", avatar: "⚡", avatarImg: "assets/mbappe.png", color: "#ab47bc", money: 1000000, pos: 0, ownedProps: [], stadiums: {}, theme: "blue-theme" },
-  { name: "Haaland", avatar: "🔨", avatarImg: "assets/haaland.png", color: "#66bb6a", money: 1000000, pos: 0, ownedProps: [], stadiums: {}, theme: "pink-theme" },
+  { name: "The Architect", avatar: "🧠", avatarImg: null, color: "#29b6f6", money: 1000000, pos: 0, ownedProps: [], stadiums: {}, theme: "blue-theme", archetype: "playmaker" },
+  { name: "The King", avatar: "👑", avatarImg: null, color: "#d92c4c", money: 1000000, pos: 0, ownedProps: [], stadiums: {}, theme: "pink-theme", archetype: "finisher" },
+  { name: "The Rocket", avatar: "⚡", avatarImg: null, color: "#253b78", money: 1000000, pos: 0, ownedProps: [], stadiums: {}, theme: "blue-theme", archetype: "speedster" },
+  { name: "The Viking", avatar: "🛡️", avatarImg: null, color: "#a52b36", money: 1000000, pos: 0, ownedProps: [], stadiums: {}, theme: "pink-theme", archetype: "target" },
+  { name: "The Wizard", avatar: "🪄", avatarImg: null, color: "#f2c21b", money: 1000000, pos: 0, ownedProps: [], stadiums: {}, theme: "blue-theme", archetype: "dribbler" },
 ];
