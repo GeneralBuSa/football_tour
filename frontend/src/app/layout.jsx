@@ -1,10 +1,15 @@
+import { Outfit, Plus_Jakarta_Sans, Rajdhani } from 'next/font/google';
 import '../../css/style.css';
 import ConsentAnalytics from './shared/ConsentAnalytics.jsx';
 import SessionWatcher from './shared/SessionWatcher.jsx';
 import { SITE_DESCRIPTION, SITE_NAME, SITE_URL } from './shared/siteConfig.js';
 
-// CSS içindeki @import yerine: tarayıcı font CSS'ini ana stil dosyasını beklemeden indirir.
-const FONT_STYLESHEET = 'https://fonts.googleapis.com/css2?family=Rajdhani:wght@600;700;800&family=Outfit:wght@500;600;700;800&family=Plus+Jakarta+Sans:wght@400;500;600;700&display=swap';
+// Fontlar build sırasında indirilip siteyle birlikte sunulur: her sayfa açılışında
+// fonts.googleapis.com'a render'ı bloklayan bir CSS isteği ve iki ek bağlantı gitmez.
+// Adlar css/base/variables.css'teki --font-* değişkenleriyle kullanılır.
+const rajdhani = Rajdhani({ subsets: ['latin', 'latin-ext'], weight: ['600', '700'], display: 'swap', variable: '--font-rajdhani' });
+const outfit = Outfit({ subsets: ['latin', 'latin-ext'], weight: ['500', '600', '700', '800'], display: 'swap', variable: '--font-outfit' });
+const jakarta = Plus_Jakarta_Sans({ subsets: ['latin', 'latin-ext'], weight: ['400', '500', '600', '700'], display: 'swap', variable: '--font-jakarta' });
 
 export const metadata = {
   metadataBase: new URL(SITE_URL),
@@ -50,12 +55,7 @@ export const viewport = {
 
 export default function RootLayout({ children }) {
   return (
-    <html lang="tr" suppressHydrationWarning>
-      <head>
-        <link rel="preconnect" href="https://fonts.googleapis.com" />
-        <link rel="preconnect" href="https://fonts.gstatic.com" crossOrigin="" />
-        <link rel="stylesheet" href={FONT_STYLESHEET} />
-      </head>
+    <html lang="tr" className={`${rajdhani.variable} ${outfit.variable} ${jakarta.variable}`} suppressHydrationWarning>
       <body suppressHydrationWarning>
         <a href="#main-content" className="skip-link">İçeriğe geç</a>
         <div id="main-content">{children}</div>

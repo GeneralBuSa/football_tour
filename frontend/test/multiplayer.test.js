@@ -20,7 +20,7 @@ function fakeApi({ userId = 'me', session = null } = {}) {
 
 function createService(options) {
   const api = fakeApi(options);
-  const service = new MultiplayerService({ api, apiBase: 'http://api.test' });
+  const service = new MultiplayerService({ api });
   return { api, service };
 }
 

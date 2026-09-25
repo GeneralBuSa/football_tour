@@ -24,7 +24,7 @@
   padding: 0;
   overflow: hidden;
   color: var(--g-fg);
-  font-family: 'Outfit', system-ui, sans-serif;
+  font-family: var(--font-outfit), system-ui, sans-serif;
   /* Gece maçı atmosferi: tribün ışıkları, çim bantları, tahtanın altında saha parıltısı */
   background:
     radial-gradient(ellipse 55% 42% at 50% 58%, rgba(74, 222, 128, 0.2), transparent 70%),
@@ -55,10 +55,6 @@
   width: min(560px, calc(100vw - 540px));
   min-width: 320px;
   z-index: 30;
-}
-
-.game-wrap .game-title {
-  display: none;
 }
 
 .game-status-card,
@@ -189,11 +185,6 @@
   box-shadow: inset 0 -2px 0 rgba(15, 23, 42, 0.08);
   color: #0f172a;
   overflow: hidden;
-}
-
-.game-wrap .cell:hover:not(.cell-center):not(.cell-empty) {
-  background: #ffffff;
-  box-shadow: inset 0 0 0 2px var(--g-primary);
 }
 
 .game-wrap .owner-color-bar {
@@ -477,10 +468,6 @@
   letter-spacing: 0.8px;
   padding: 2px 8px;
   border-radius: 999px;
-}
-
-.game-wrap .money-pile-wrap {
-  display: none;
 }
 
 /* ---------- Kontroller ---------- */

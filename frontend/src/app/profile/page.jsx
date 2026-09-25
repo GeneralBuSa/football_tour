@@ -1,13 +1,17 @@
 'use client';
 import { useEffect, useState } from 'react';
+import Link from 'next/link';
 import useSession from '../shared/useSession.js';
 import PageShell from '../shared/PageShell.jsx';
 import EmptyState from '../shared/EmptyState.jsx';
 import { getPlayerByKey } from '../../../js/data/playerCatalog.js';
 import apiService from '../../../services/ApiService.js';
 
+// backend/routes/auth.js MAX_AVATAR_DATA_URL_LENGTH ile aynı olmalıdır.
+const MAX_AVATAR_DATA_URL_LENGTH = 32_000;
+
 export default function ProfilePage() {
-  const { isLoggedIn, user: sessionUser, stats, setStats, language, mounted, gameReady, t, apiService: api } = useSession({ loadGame: false });
+  const { isLoggedIn, user: sessionUser, stats, language, gameReady, t } = useSession();
   const [user, setUser] = useState(null);
   const [purchases, setPurchases] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -158,7 +162,9 @@ export default function ProfilePage() {
     const img = new Image();
     img.onload = () => {
       const canvas = document.createElement('canvas');
-      const CANVAS_SIZE = 256;
+      // Avatar arkadaş listesi ve maç ekranında da gönderildiği için küçük tutulur;
+      // sunucu en fazla MAX_AVATAR_DATA_URL_LENGTH karakterlik data URL kabul eder.
+      const CANVAS_SIZE = 160;
       canvas.width = CANVAS_SIZE;
       canvas.height = CANVAS_SIZE;
       const ctx = canvas.getContext('2d');
@@ -171,13 +177,17 @@ export default function ProfilePage() {
       const drawW = img.width * totalScale;
       const drawH = img.height * totalScale;
       const drawX = (CANVAS_SIZE / 2) + (cropOffset.x * CANVAS_SIZE / CROP_MASK_SIZE) - drawW / 2;
-      const drawY = (CANVAS_SIZE / 2) + (cropOffset.y * CROP_MASK_SIZE) - drawH / 2;
+      const drawY = (CANVAS_SIZE / 2) + (cropOffset.y * CANVAS_SIZE / CROP_MASK_SIZE) - drawH / 2;
 
       ctx.fillStyle = '#0d1117';
       ctx.fillRect(0, 0, CANVAS_SIZE, CANVAS_SIZE);
       ctx.drawImage(img, drawX, drawY, drawW, drawH);
 
-      const dataUrl = canvas.toDataURL('image/jpeg', 0.85);
+      let dataUrl = '';
+      for (const quality of [0.85, 0.7, 0.55, 0.4]) {
+        dataUrl = canvas.toDataURL('image/jpeg', quality);
+        if (dataUrl.length <= MAX_AVATAR_DATA_URL_LENGTH) break;
+      }
       setTempAvatar(dataUrl);
       setShowCropModal(false);
       setCropImageSrc(null);
@@ -285,7 +295,7 @@ export default function ProfilePage() {
   const progressPercent = xpNeededForNext > 0 ? Math.min(100, (xpInCurrentLevel / xpNeededForNext) * 100) : 100;
 
   return (
-    <PageShell activePage="profile" stats={stats} t={t} mounted={mounted}>
+    <PageShell activePage="profile" stats={stats} t={t} language={language}>
       <div className="menu-dynamic-screen">
         <div className="dynamic-screen-header" style={{ display: 'flex', alignItems: 'center', gap: '16px', borderBottom: '2px solid rgba(41, 182, 246, 0.3)' }}>
           <button className="btn-mode-back" onClick={() => { window.location.href = '/' }} style={{ margin: '0', padding: '6px 12px', fontSize: '12px' }}>← {t.back}</button>
@@ -432,9 +442,9 @@ export default function ProfilePage() {
                   <div style={{ fontSize: '11px', color: '#8892b0', marginTop: '8px', textAlign: 'right', fontWeight: '500' }}>
                     {t.profile_next_level} <span style={{ color: '#fff' }}>{nextLevelXp - currentXp} XP</span>
                   </div>
-                  <a href="/battlepass" style={{ display: 'inline-block', marginTop: '10px', padding: '8px 0', fontSize: '12px', fontWeight: '700', color: '#29b6f6' }}>
+                  <Link href="/battlepass" style={{ display: 'inline-block', marginTop: '10px', padding: '8px 0', fontSize: '12px', fontWeight: '700', color: '#29b6f6' }}>
                     {language === 'English' ? 'View battle pass rewards →' : 'Savaş bileti ödüllerini gör →'}
-                  </a>
+                  </Link>
                 </div>
               </div>
 

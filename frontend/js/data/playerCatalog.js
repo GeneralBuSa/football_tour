@@ -1,8 +1,6 @@
 // Satılabilir futbolcu kataloğu ve başlangıç hediyesi kuralları.
 // Karakter fiyatları coin cinsindendir. Coin paketleri kademeli fiyatlandırılır.
 
-export const COINS_PER_USD = 100;
-
 export const PLAYER_CATALOG = [
   {
     key: 'architect',

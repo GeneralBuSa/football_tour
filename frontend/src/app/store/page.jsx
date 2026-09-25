@@ -6,7 +6,7 @@ import { getPlayerByKey } from '../../../js/data/playerCatalog.js';
 import { trackEvent } from '../../../services/analytics.js';
 
 export default function Page() {
-  const { isLoggedIn, user, stats, setStats, language, mounted, gameReady, t, apiService } = useSession({ loadGame: false });
+  const { isLoggedIn, user, stats, setStats, language, gameReady, t, apiService } = useSession();
   const [items, setItems] = useState([]);
   const [purchases, setPurchases] = useState([]);
   const [entitlements, setEntitlements] = useState([]);
@@ -160,7 +160,7 @@ export default function Page() {
            )}
            {coinPacks.length > 0 && (
              <section style={{ padding: '16px', border: '1px solid rgba(255,183,77,.25)', borderRadius: '12px', background: 'rgba(255,183,77,.04)' }}>
-               <h2 style={{ margin: '0 0 12px', color: '#ffb74d', fontSize: '16px' }}>🪙 Coin satın al</h2>
+               <h2 style={{ margin: '0 0 12px', color: '#ffb74d', fontSize: '16px' }}>🪙 {language === 'English' ? 'Buy coins' : 'Coin satın al'}</h2>
                <div style={{ display: 'flex', flexWrap: 'wrap', gap: '10px' }}>
                  {coinPacks.map(pack => (
                    <button key={pack.key} type="button" className="mbtn mbtn-buy" onClick={() => handleCoinPack(pack)} disabled={loading || !!busyKey} aria-busy={busyKey === `pack:${pack.key}`} style={{ minHeight: '44px' }}>

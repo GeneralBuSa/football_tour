@@ -5,15 +5,15 @@ import useSession from '../shared/useSession.js';
 import PageShell from '../shared/PageShell.jsx';
 import { PLAYER_CATALOG, STARTER_CHARACTER_KEYS } from '../../../js/data/playerCatalog.js';
 import { trackEvent } from '../../../services/analytics.js';
+import { safeNextPath } from '../shared/safeRedirect.js';
 
 // Giriş sonrası dönülecek sayfa (yalnızca site içi göreli yol kabul edilir).
 function destination() {
-  const next = new URLSearchParams(window.location.search).get('next');
-  return next && next.startsWith('/') && !next.startsWith('//') ? next : '/';
+  return safeNextPath(new URLSearchParams(window.location.search).get('next')) || '/';
 }
 
 export default function StarterPage() {
-  const { isLoggedIn, mounted, gameReady, t, apiService, stats } = useSession({ loadGame: false });
+  const { isLoggedIn, language, gameReady, t, apiService, stats } = useSession();
   const [loading, setLoading] = useState(true);
   const [claiming, setClaiming] = useState(false);
   const [error, setError] = useState('');
@@ -49,7 +49,7 @@ export default function StarterPage() {
   const choices = PLAYER_CATALOG.filter(player => STARTER_CHARACTER_KEYS.includes(player.key));
 
   return (
-    <PageShell activePage="home" stats={stats} t={t} mounted={mounted}>
+    <PageShell activePage="home" stats={stats} t={t} language={language}>
       <main style={{ height: '100vh', overflowY: 'auto', display: 'grid', alignItems: 'start', justifyItems: 'center', padding: '40px 24px 96px', boxSizing: 'border-box', WebkitOverflowScrolling: 'touch' }}>
         <section style={{ width: 'min(900px, 100%)', margin: 'auto 0', padding: 32, borderRadius: 22, background: 'rgba(10,15,25,.92)', border: '1px solid rgba(41,182,246,.25)', textAlign: 'center' }}>
           <p style={{ color: '#29b6f6', letterSpacing: 3, fontWeight: 800 }}>{t.starter_welcome_pack}</p>

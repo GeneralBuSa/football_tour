@@ -6,8 +6,22 @@ import apiService from '../../../services/ApiService.js';
 import tr from '../../locales/tr.json';
 import en from '../../locales/en.json';
 
-// loadGame=false: oyun motoru/Three.js yüklenmez (kurallar, gizlilik gibi içerik sayfaları).
-export default function useSession({ loadStats = true, loadGame = true } = {}) {
+// Sayfalar arası istemci tarafı geçişte modül durumu korunur: üst menüdeki bakiye
+// her sayfada boş başlayıp API'yi beklemek yerine son bilinen değerle hemen görünür,
+// ardından arka planda tazelenir.
+let cachedStats = null;
+
+// Oyun ekranındaki tema tercihi (js/ui/settings.js initTheme ile aynı anahtar).
+// Başarımlar gibi sayfalar .light-theme stillerini kullanır; bunun için oyun motorunu
+// (Three.js dahil ~700 KB) yüklemeye gerek yoktur.
+function applySavedTheme() {
+  try {
+    document.body.classList.toggle('light-theme', localStorage.getItem('game_theme') === 'light');
+  } catch { /* depolama kapalı: varsayılan koyu tema */ }
+}
+
+// Oyun motoru (js/game.js) burada yüklenmez: oyun ekranı yalnızca ana sayfadadır.
+export default function useSession({ loadStats = true } = {}) {
   const [isLoggedIn, setIsLoggedIn] = useState(false);
   const [user, setUser] = useState(null);
   // Bakiye yüklenene kadar boş kalır; üst menü sahte bir "₺0" göstermez.
@@ -25,34 +39,26 @@ export default function useSession({ loadStats = true, loadGame = true } = {}) {
 
     const savedLang = localStorage.getItem('ft26_language') || 'Türkçe';
     setLanguage(savedLang);
+    applySavedTheme();
 
-    if (logged) {
-      const u = apiService.getUser();
-      setUser(u);
-    }
+    const u = logged ? apiService.getUser() : null;
+    if (u) setUser(u);
     setMounted(true);
 
-    const loadStatsNow = () => {
-      if (logged && loadStats) {
-        const u = apiService.getUser();
-        apiService.getStats(u.id).then(res => {
-          if (res && !res.error) setStats(res);
-        }).catch(console.error);
-      }
-    };
+    setGameReady(true);
 
-    if (!loadGame) {
-      setGameReady(true);
-      loadStatsNow();
-      return;
+    if (u && loadStats) {
+      if (cachedStats && cachedStats.userId === u.id) setStats(cachedStats.data);
+      apiService.getStats(u.id).then(res => {
+        if (res && !res.error) setStats(res);
+      }).catch(console.error);
     }
-
-    // 2. game.js dinamik modülünü arka planda yükle
-    import('../../../js/game.js').then(async () => {
-      setGameReady(true);
-      loadStatsNow();
-    }).catch(console.error);
   }, []);
+
+  // Sayfa içi güncellemeler (mağaza satın alımı, promosyon kodu) de önbelleğe yansır.
+  useEffect(() => {
+    if (user?.id && typeof stats?.total_earnings === 'number') cachedStats = { userId: user.id, data: stats };
+  }, [stats, user]);
 
   return {
     isLoggedIn,

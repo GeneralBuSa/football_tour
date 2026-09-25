@@ -105,9 +105,44 @@ export const IDLE_FACING = -Math.PI / 4;
 const modelCache = new Map();
 let gltfLoaderPromise = null;
 
+// Ana menü açılırken ~2.5 MB model + Draco indirmesi ilk boyamayla ve menüdeki
+// tıklamalarla yarışmasın: indirme sayfa yüklenip tarayıcı boşa çıkınca başlar.
+// Oyun ekranı açılırsa beklemeden hemen başlar (bkz. update3DPawnsTargetPositions).
+let releaseModelGate = null;
+const modelGate = new Promise(resolve => { releaseModelGate = resolve; });
+
+function startModelDownloads() {
+  if (releaseModelGate) {
+    releaseModelGate();
+    releaseModelGate = null;
+  }
+}
+
+export function modelDownloadsStarted() {
+  return releaseModelGate === null;
+}
+
+function scheduleModelDownloads() {
+  if (typeof window === 'undefined' || typeof document === 'undefined') {
+    startModelDownloads();
+    return;
+  }
+  const whenIdle = () => {
+    if (typeof window.requestIdleCallback === 'function') {
+      window.requestIdleCallback(startModelDownloads, { timeout: 3000 });
+    } else {
+      setTimeout(startModelDownloads, 1000);
+    }
+  };
+  if (document.readyState === 'complete') whenIdle();
+  else window.addEventListener('load', whenIdle, { once: true });
+}
+
+scheduleModelDownloads();
+
 function getLoader() {
   if (!gltfLoaderPromise) {
-    gltfLoaderPromise = Promise.all([
+    gltfLoaderPromise = modelGate.then(() => Promise.all([
       import('three/examples/jsm/loaders/GLTFLoader.js'),
       import('three/examples/jsm/loaders/DRACOLoader.js')
     ]).then(([{ GLTFLoader }, { DRACOLoader }]) => {
@@ -116,7 +151,7 @@ function getLoader() {
       const loader = new GLTFLoader();
       loader.setDRACOLoader(draco);
       return loader;
-    });
+    }));
   }
   return gltfLoaderPromise;
 }
@@ -321,6 +356,10 @@ export function getPlayer3DPosition(playerIndex, cellIndex) {
 
 // Piyon pozisyonlarını güncelle
 export function update3DPawnsTargetPositions() {
+  // Oyun ekranı görünür: modelleri boşta kalmayı beklemeden indir.
+  if (typeof document !== 'undefined' && document.getElementById('board-grid')?.offsetParent) {
+    startModelDownloads();
+  }
   syncPawnsWithPlayers();
   PLAYERS.forEach((p, index) => {
     if (p.threeGroup) p.target3DPosition = getPlayer3DPosition(index, p.pos);

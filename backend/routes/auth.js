@@ -1,9 +1,10 @@
 import express from 'express';
 import bcrypt from 'bcryptjs';
 import { createHash, randomBytes } from 'node:crypto';
-import jwt from 'jsonwebtoken';
 import { supabase } from '../db.js';
-import { createAuthMiddleware, requireEnv } from '../middleware/auth.js';
+import {
+  createAuthMiddleware, invalidateTokenVersion, requireEnv, signSessionToken, signStreamTicket
+} from '../middleware/auth.js';
 import { isEmailConfigured, sendPasswordResetEmail } from '../services/email.js';
 import { createRateLimiter, validateObjectBody } from '../middleware/security.js';
 import { sendDbError } from '../middleware/errors.js';
@@ -13,6 +14,9 @@ const authenticate = createAuthMiddleware();
 const jwtSecret = requireEnv('JWT_SECRET');
 const resetAttempts = new Map();
 const loginLimiter = createRateLimiter({ windowMs: 15 * 60 * 1000, max: 10 });
+// Her yeni hesap başlangıç coin'i ve ücretsiz karakter aldığı için toplu hesap açmaya karşı
+// IP başına saatlik sınır (paylaşılan ağlar için makul; REGISTER_RATE_LIMIT ile ayarlanır).
+const registerLimiter = createRateLimiter({ windowMs: 60 * 60 * 1000, max: Number(process.env.REGISTER_RATE_LIMIT) || 20 });
 const forgotPasswordLimiter = createRateLimiter({ windowMs: 15 * 60 * 1000, max: 5 });
 const deleteAccountLimiter = createRateLimiter({ windowMs: 15 * 60 * 1000, max: 5, key: req => `delete:${req.user.id}` });
 
@@ -34,12 +38,29 @@ function isResetRateLimited(key) {
   return attempts.length > maxAttempts;
 }
 
+// Avatar: kısa emoji/metin, sitedeki yerel bir görsel ya da profil sayfasının kırpıp
+// küçülttüğü bir data URL. Harici http(s) adresleri kabul edilmez: arkadaş listesinde ve
+// maçta görüntülendiklerinde diğer oyuncuların IP adreslerini üçüncü taraflara sızdırırlar.
+export const MAX_AVATAR_DATA_URL_LENGTH = 32_000;
+const AVATAR_DATA_URL_PATTERN = /^data:image\/(?:png|jpeg|webp);base64,[A-Za-z0-9+/]+={0,2}$/;
+const AVATAR_LOCAL_PATH_PATTERN = /^\/(?:assets|docs)\/[A-Za-z0-9_./-]{1,120}\.(?:png|jpe?g|webp|svg)$/;
+
+export function isValidAvatar(avatar) {
+  if (typeof avatar !== 'string' || !avatar) return false;
+  if (avatar.startsWith('data:')) {
+    return avatar.length <= MAX_AVATAR_DATA_URL_LENGTH && AVATAR_DATA_URL_PATTERN.test(avatar);
+  }
+  if (avatar.startsWith('/')) return AVATAR_LOCAL_PATH_PATTERN.test(avatar) && !avatar.includes('..');
+  // Emoji/metin: en fazla 16 karakter, URL veya kontrol karakteri içermez.
+  return avatar.length <= 16 && !/[\u0000-\u001f<>]/.test(avatar) && !/^[a-z][a-z0-9+.-]*:/i.test(avatar);
+}
+
 function hashResetToken(token) {
   return createHash('sha256').update(token).digest('hex');
 }
 
 // Register
-router.post('/register', validateObjectBody, async (req, res) => {
+router.post('/register', validateObjectBody, registerLimiter, async (req, res) => {
   const { username, password } = req.body;
   // E-posta DB'de lower(email) üzerinden unique; kontrolü de aynı biçimde yapıyoruz.
   const email = typeof req.body.email === 'string' ? req.body.email.trim().toLowerCase() : '';
@@ -85,7 +106,7 @@ router.post('/register', validateObjectBody, async (req, res) => {
 
     if (error) return sendDbError(res, error);
 
-    const token = jwt.sign({ id: data.id, username: data.username }, jwtSecret, { expiresIn: '7d' });
+    const token = signSessionToken(data, jwtSecret);
     
     res.json({ token, user: { id: data.id, username: data.username, email: data.email, avatar: data.avatar, selected_character: data.selected_character || null } });
   } catch (e) {
@@ -112,7 +133,7 @@ router.post('/login', validateObjectBody, loginLimiter, async (req, res) => {
     const isMatch = await bcrypt.compare(password, data.password_hash);
     if (!isMatch) return res.status(400).json({ error: 'Invalid credentials' });
 
-    const token = jwt.sign({ id: data.id, username: data.username }, jwtSecret, { expiresIn: '7d' });
+    const token = signSessionToken(data, jwtSecret);
     res.json({ token, user: { id: data.id, username: data.username, email: data.email, avatar: data.avatar, selected_character: data.selected_character || null } });
   } catch (e) {
     res.status(500).json({ error: 'Server error' });
@@ -135,11 +156,17 @@ router.get('/me', authenticate, async (req, res) => {
   }
 });
 
+// Canlı bildirim/maç akışı (SSE) için kısa ömürlü bilet. EventSource başlık gönderemez;
+// URL'de oturum token'ı yerine yalnızca bu bilet taşınır.
+router.post('/stream-ticket', authenticate, (req, res) => {
+  res.json({ ticket: signStreamTicket(req.user, jwtSecret), expires_in: 60 });
+});
+
 // Update Avatar
 router.put('/avatar', authenticate, validateObjectBody, async (req, res) => {
   const { avatar } = req.body;
-  if (typeof avatar !== 'string' || avatar.length > 2_000) {
-    return res.status(400).json({ error: 'Avatar gereklidir' });
+  if (!isValidAvatar(avatar)) {
+    return res.status(400).json({ error: 'Geçersiz avatar. Bir emoji seçin veya en fazla 32 KB boyutunda bir resim yükleyin.' });
   }
 
   try {
@@ -183,6 +210,7 @@ router.delete('/account', authenticate, deleteAccountLimiter, validateObjectBody
     console.error('[auth/account] delete failed:', deleteError.message);
     return res.status(500).json({ error: 'Hesap silinemedi. Lütfen daha sonra tekrar deneyin.' });
   }
+  invalidateTokenVersion(req.user.id);
 
   res.json({ success: true });
 });
@@ -266,10 +294,18 @@ router.post('/reset-password', validateObjectBody, async (req, res) => {
     }
 
     const password_hash = await bcrypt.hash(newPassword, 10);
+    const { data: account } = await supabase
+      .from('users')
+      .select('token_version')
+      .eq('id', claimedToken.user_id)
+      .maybeSingle();
+    // Sürüm artırılınca şifre değişmeden önce verilmiş tüm oturumlar (çalınmış olabilecek
+    // token'lar dahil) geçersiz olur.
     const { error } = await supabase
       .from('users')
-      .update({ password_hash })
+      .update({ password_hash, token_version: (Number(account?.token_version) || 0) + 1 })
       .eq('id', claimedToken.user_id);
+    invalidateTokenVersion(claimedToken.user_id);
 
     if (error) {
       await supabase.from('password_reset_tokens').update({ used_at: null }).eq('id', claimedToken.id);

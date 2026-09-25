@@ -7,6 +7,7 @@ import { sendDbError } from '../middleware/errors.js';
 const router = express.Router();
 const authenticate = createAuthMiddleware();
 const CHARACTER_KEYS = ['architect', 'king', 'viking', 'rocket', 'wizard'];
+const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 router.get('/items', async (req, res) => {
   const { data, error } = await supabase
@@ -87,7 +88,7 @@ router.get('/entitlements/:userId', authenticate, requireSameUser, async (req, r
 
 router.post('/purchase', authenticate, validateObjectBody, async (req, res) => {
   const { item_id } = req.body;
-  if (!item_id) return res.status(400).json({ error: 'item_id required' });
+  if (typeof item_id !== 'string' || !UUID_PATTERN.test(item_id)) return res.status(400).json({ error: 'item_id required' });
 
   const { data, error } = await supabase.rpc('purchase_store_item', {
     p_user_id: req.user.id,

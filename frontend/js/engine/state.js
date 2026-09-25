@@ -11,8 +11,6 @@ export let PLAYERS = DEFAULT_PLAYERS.map(p => ({ ...p, ownedProps: [...p.ownedPr
 // Oyun durumu
 export let currentPlayer = 0;
 export let turnCount = 1;
-export let dice1 = 1;
-export let dice2 = 1;
 export let diceRolled = false;
 export let gameLog = [];
 export let activeTab = 'props';
@@ -24,7 +22,6 @@ export let currentTutorialText = "Oyunun amacı mülk satın almak ve zenginleş
 // State güncelleme fonksiyonları
 export function setCurrentPlayer(val) { currentPlayer = val; }
 export function setTurnCount(val) { turnCount = val; }
-export function setDice(d1, d2) { dice1 = d1; dice2 = d2; }
 export function setDiceRolled(val) { diceRolled = val; }
 export function setActiveTab(val) { activeTab = val; }
 export function setGameTime(val) { gameTime = val; }
@@ -46,8 +43,6 @@ export function resetState() {
   PLAYERS = DEFAULT_PLAYERS.map(p => ({ ...p, ownedProps: [...p.ownedProps], stadiums: { ...p.stadiums } }));
   currentPlayer = 0;
   turnCount = 1;
-  dice1 = 1;
-  dice2 = 1;
   diceRolled = false;
   gameLog = [];
   activeTab = 'props';

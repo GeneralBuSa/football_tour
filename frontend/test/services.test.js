@@ -118,7 +118,26 @@ test('social API helpers hit the right endpoints', async () => {
     'DELETE /auth/account'
   ]);
   assert.deepEqual(JSON.parse(calls[2].options.body), { friend_id: 'f3', body: 'selam' });
-  assert.equal(api.getMessageStreamUrl().includes('token=t'), true);
+});
+
+test('live stream URLs carry a short-lived ticket, never the session token', async () => {
+  const api = new ApiService();
+  api.setToken('session-token-secret');
+  api.setUser({ id: 'me' });
+  const calls = mockFetch(() => jsonResponse(200, { ticket: 'short.lived.ticket', expires_in: 60 }));
+
+  const messages = await api.getMessageStreamUrl();
+  const match = await api.createStreamUrl('/multiplayer/sessions/s1/events');
+  assert.match(messages, /\/messages\/stream\?ticket=short\.lived\.ticket$/);
+  assert.match(match, /\/multiplayer\/sessions\/s1\/events\?ticket=short\.lived\.ticket$/);
+  [messages, match].forEach(url => assert.doesNotMatch(url, /session-token-secret/));
+  // Bilet, oturum token'ıyla (Authorization başlığında) alınır.
+  assert.equal(calls[0].options.method, 'POST');
+  assert.match(calls[0].url, /\/auth\/stream-ticket$/);
+  assert.equal(calls[0].options.headers.Authorization, 'Bearer session-token-secret');
+
+  mockFetch(() => jsonResponse(503, { error: 'down' }));
+  assert.equal(await api.getMessageStreamUrl(), null, 'bilet alınamazsa URL üretilmez');
 });
 
 test('logged-out users cannot call social endpoints', async () => {
@@ -126,8 +145,8 @@ test('logged-out users cannot call social endpoints', async () => {
   const calls = mockFetch(() => jsonResponse(200, {}));
   assert.ok((await api.sendMessage('x', 'y')).error);
   assert.ok((await api.removeFriend('x')).error);
+  assert.equal(await api.getMessageStreamUrl(), null);
   assert.equal(calls.length, 0);
-  assert.equal(api.getMessageStreamUrl(), null);
 });
 
 test('mergeMessages de-duplicates by id and keeps chronological order', () => {
@@ -160,15 +179,16 @@ test('groupFriends splits accepted, incoming and outgoing requests', () => {
   assert.deepEqual(groupFriends({ error: 'x' }), { accepted: [], incoming: [], outgoing: [] });
 });
 
-test('SocialStream delivers parsed events to subscribers and ignores heartbeats', () => {
+test('SocialStream delivers parsed events to subscribers and ignores heartbeats', async () => {
   const sources = [];
   globalThis.EventSource = class {
     constructor(url) { this.url = url; sources.push(this); }
     close() { this.closed = true; }
   };
-  const stream = new SocialStream({ api: { getMessageStreamUrl: () => 'http://api.test/stream', isLoggedIn: () => true } });
+  const stream = new SocialStream({ api: { getMessageStreamUrl: async () => 'http://api.test/stream?ticket=x', isLoggedIn: () => true } });
   const received = [];
   const unsubscribe = stream.subscribe(payload => received.push(payload.type));
+  await new Promise(resolve => setTimeout(resolve, 0));
   sources[0].onmessage({ data: JSON.stringify({ type: 'heartbeat' }) });
   sources[0].onmessage({ data: JSON.stringify({ type: 'message', message: {} }) });
   sources[0].onmessage({ data: 'not json' });

@@ -2,11 +2,10 @@
 // ZAR ATMA VE PİYON HAREKETİ
 // ==========================================
 
-import { CITIES, SPECIAL_CELLS } from '../data/cities.js';
 import { BOARD_SIZE } from '../data/boardLayout.js';
 import {
-  PLAYERS, currentPlayer, diceRolled, turnCount,
-  setDice, setDiceRolled, setTutorialText
+  PLAYERS, currentPlayer, diceRolled,
+  setDiceRolled, setTutorialText
 } from './state.js';
 import { boardCells, buildBoard } from './board.js';
 import { addLog, showNotif, updateTutorialHUD } from '../ui/panel.js';
@@ -33,7 +32,6 @@ export function rollDice() {
 
   const d1 = Math.ceil(Math.random() * 6);
   const d2 = Math.ceil(Math.random() * 6);
-  setDice(d1, d2);
   const totalSteps = d1 + d2;
 
   setTutorialText(`${PLAYERS[currentPlayer].name} zar atıyor... Sonuç: 🎲 ${d1} + 🎲 ${d2} = ${totalSteps} adım!`);

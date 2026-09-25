@@ -3,7 +3,7 @@
 // ==========================================
 
 import {
-  PLAYERS, currentPlayer, turnCount, gameLog, activeTab, currentTutorialText,
+  PLAYERS, turnCount, gameLog, activeTab, currentTutorialText,
   setActiveTab, addLogEntry
 } from '../engine/state.js';
 import { boardCells } from '../engine/board.js';

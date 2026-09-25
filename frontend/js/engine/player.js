@@ -3,7 +3,7 @@
 // ==========================================
 
 import {
-  PLAYERS, currentPlayer, turnCount, diceRolled,
+  PLAYERS, currentPlayer, turnCount,
   gameEnded, timerId,
   setCurrentPlayer, setTurnCount, setDiceRolled, setTutorialText, setGameEnded, setTimerId
 } from './state.js';
@@ -12,16 +12,7 @@ import gameService from '../../services/GameService.js';
 import multiplayerService from '../../services/MultiplayerService.js';
 import { trackEvent } from '../../services/analytics.js';
 import { resolveCharacterKey } from '../3d/pawns.js';
-
-function escapeHtml(value) {
-  return String(value ?? '').replace(/[&<>"']/g, char => ({
-    '&': '&amp;',
-    '<': '&lt;',
-    '>': '&gt;',
-    '"': '&quot;',
-    "'": '&#39;'
-  }[char]));
-}
+import { escapeHtml } from '../utils/html.js';
 
 const isImageAvatar = value => typeof value === 'string' && /^(\/|data:image\/|https?:\/\/)/.test(value);
 

@@ -18,6 +18,8 @@ export function configureTestEnv() {
   process.env.NODE_ENV ||= 'test';
   // Testler ve dev-memory şifre sıfırlama token'ını yanıtta görebilir (production'da asla).
   process.env.ALLOW_DEV_RESET_TOKEN ||= '1';
+  // Testler aynı IP'den çok sayıda hesap açar.
+  process.env.REGISTER_RATE_LIMIT ||= '10000';
 }
 
 // Supabase'in sağladığı rolleri ve auth.uid() fonksiyonunu taklit eder, ardından
@@ -80,12 +82,23 @@ export async function startTestServer() {
     return { ...res.body.user, token: res.body.token, password };
   }
 
-  // SSE akışını dinler; gelen olayları toplar ve beklemeye izin verir.
-  function openStream(urlPath) {
+  // Oturum token'ıyla kısa ömürlü SSE akış bileti alır (URL'de yalnızca bilet taşınır).
+  async function streamTicket(token) {
+    const res = await api('POST', '/auth/stream-ticket', { token });
+    if (res.status !== 200) throw new Error(`stream ticket failed: ${res.status}`);
+    return res.body.ticket;
+  }
+
+  // SSE akışını dinler; gelen olayları toplar ve beklemeye izin verir. token verilirse
+  // önce akış bileti alınır ve ?ticket= olarak eklenir.
+  function openStream(urlPath, token) {
     const controller = new AbortController();
     const events = [];
     const waiters = [];
-    const ready = fetch(`${baseUrl}/api${urlPath}`, { signal: controller.signal }).then(async response => {
+    const url = token
+      ? streamTicket(token).then(ticket => `${urlPath}${urlPath.includes('?') ? '&' : '?'}ticket=${encodeURIComponent(ticket)}`)
+      : Promise.resolve(urlPath);
+    const ready = url.then(fullPath => fetch(`${baseUrl}/api${fullPath}`, { signal: controller.signal })).then(async response => {
       if (!response.ok) throw new Error(`stream failed: ${response.status}`);
       const reader = response.body.getReader();
       const decoder = new TextDecoder();
@@ -147,5 +160,21 @@ export async function startTestServer() {
     await db.close();
   }
 
-  return { db, api, baseUrl, registerUser, openStream, close };
+  return { db, api, baseUrl, registerUser, openStream, streamTicket, close };
+}
+
+// Çevrimiçi maç için kurallara uygun bir oyun durumu (game/stateRules.js).
+export function onlineState({ money = [1_000_000, 1_000_000], owned = [[], []], stadiums = [{}, {}], pos = [0, 0], currentPlayer = 0, turnCount = 1, names = ['Host', 'Guest'] } = {}) {
+  return {
+    players: money.map((value, i) => ({ name: names[i], money: value, pos: pos[i], ownedProps: owned[i], stadiums: stadiums[i] })),
+    currentPlayer,
+    turnCount,
+    gameTime: 1800,
+    gameLog: []
+  };
+}
+
+// "Süre doldu" bitişlerini test edebilmek için maçın başlangıç zamanını geriye alır.
+export async function ageSession(db, sessionId, minutes = 31) {
+  await db.query(`UPDATE game_sessions SET created_at = now() - ($2 || ' minutes')::interval WHERE id = $1`, [sessionId, String(minutes)]);
 }

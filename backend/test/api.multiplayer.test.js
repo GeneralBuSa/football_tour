@@ -1,7 +1,7 @@
 // Canlı eşleştirme ve çevrimiçi oyun akışının HTTP + SSE entegrasyon testleri.
 import test, { after, before } from 'node:test';
 import assert from 'node:assert/strict';
-import { startTestServer } from './support/testEnv.js';
+import { ageSession, onlineState, startTestServer } from './support/testEnv.js';
 
 let env;
 before(async () => { env = await startTestServer(); });
@@ -51,7 +51,7 @@ test('cancel before match: leaving the queue returns user to idle', async () => 
 
 test('opponent leaving after match cancels the session and notifies over SSE', async () => {
   const { host, guest, sessionId } = await matchPair();
-  const stream = env.openStream(`/multiplayer/sessions/${sessionId}/events?token=${host.token}`);
+  const stream = env.openStream(`/multiplayer/sessions/${sessionId}/events`, host.token);
   await stream.ready;
   await stream.next(e => e.type === 'connected');
 
@@ -64,16 +64,25 @@ test('opponent leaving after match cancels the session and notifies over SSE', a
   stream.close();
 });
 
-test('private room: host creates, guest joins by username, both get matched', async () => {
+test('private room: host creates, guest joins with username + room code, both get matched', async () => {
   await env.db.query('DELETE FROM lobby_queue');
   const host = await env.registerUser('room');
   const guest = await env.registerUser('friend');
   const created = await env.api('POST', '/lobby/create-private', { token: host.token, body: {} });
   assert.equal(created.body.status, 'waiting_private');
+  assert.match(created.body.room_code, /^[A-HJ-NP-Z2-9]{6}$/);
   const waiting = await env.api('GET', `/lobby/status/${host.id}`, { token: host.token });
   assert.equal(waiting.body.status, 'waiting_private');
 
-  const joined = await env.api('POST', '/lobby/join-private', { token: guest.token, body: { host_username: host.username } });
+  // Kullanıcı adını bilmek tek başına yetmez.
+  const noCode = await env.api('POST', '/lobby/join-private', { token: guest.token, body: { host_username: host.username } });
+  assert.equal(noCode.status, 403);
+  const wrongCode = await env.api('POST', '/lobby/join-private', { token: guest.token, body: { host_username: host.username, room_code: 'AAAAAA' } });
+  assert.equal(wrongCode.status, 403);
+
+  const joined = await env.api('POST', '/lobby/join-private', {
+    token: guest.token, body: { host_username: host.username, room_code: created.body.room_code.toLowerCase() }
+  });
   assert.equal(joined.status, 200);
   assert.equal(joined.body.matched_with, host.username);
 
@@ -87,19 +96,29 @@ test('private room errors are mapped to friendly HTTP responses', async () => {
   const host = await env.registerUser('solo');
   const other = await env.registerUser('other');
   assert.equal((await env.api('POST', '/lobby/join-private', { token: other.token, body: { host_username: 'x' } })).status, 400);
+  assert.equal((await env.api('POST', '/lobby/join-private', { token: other.token, body: { host_username: host.username, room_code: 'ab' } })).status, 400);
   assert.equal((await env.api('POST', '/lobby/join-private', { token: other.token, body: { host_username: 'nobody_123' } })).status, 404);
   assert.equal((await env.api('POST', '/lobby/join-private', { token: other.token, body: { host_username: host.username } })).status, 404);
-  await env.api('POST', '/lobby/create-private', { token: host.token, body: {} });
-  assert.equal((await env.api('POST', '/lobby/join-private', { token: host.token, body: { host_username: host.username } })).status, 400);
+  const room = await env.api('POST', '/lobby/create-private', { token: host.token, body: {} });
+  assert.equal((await env.api('POST', '/lobby/join-private', { token: host.token, body: { host_username: host.username, room_code: room.body.room_code } })).status, 400);
+
+  // Kod tahmini sınırlıdır.
+  const guesser = await env.registerUser('guess');
+  let limited = false;
+  for (let i = 0; i < 25 && !limited; i++) {
+    const res = await env.api('POST', '/lobby/join-private', { token: guesser.token, body: { host_username: host.username, room_code: 'ZZZZZZ' } });
+    limited = res.status === 429;
+  }
+  assert.equal(limited, true);
 });
 
 test('game sync: host initialises, turn ownership is enforced, opponent receives every move', async () => {
   const { host, guest, sessionId } = await matchPair();
-  const guestStream = env.openStream(`/multiplayer/sessions/${sessionId}/events?token=${guest.token}`);
+  const guestStream = env.openStream(`/multiplayer/sessions/${sessionId}/events`, guest.token);
   await guestStream.ready;
   await guestStream.next(e => e.type === 'connected');
 
-  const baseState = { players: [{ name: host.username, money: 1000 }, { name: guest.username, money: 1000 }], currentPlayer: 0, turnCount: 1 };
+  const baseState = onlineState({ names: [host.username, guest.username] });
 
   // Guest oyunu başlatamaz
   const guestInit = await env.api('PUT', `/multiplayer/sessions/${sessionId}/state`, { token: guest.token, body: { state_data: baseState } });
@@ -151,8 +170,12 @@ test('state endpoint validates payloads and participants', async () => {
   assert.equal((await env.api('PUT', `/multiplayer/sessions/${sessionId}/state`, { token: host.token, body: { state_data: {}, event_type: 'DROP TABLE' } })).status, 400);
   assert.equal((await env.api('PUT', `/multiplayer/sessions/${sessionId}/state`, { token: outsider.token, body: { state_data: {} } })).status, 403);
   assert.equal((await env.api('GET', `/multiplayer/sessions/${sessionId}`, { token: outsider.token })).status, 403);
-  const events = await fetch(`${env.baseUrl}/api/multiplayer/sessions/${sessionId}/events?token=${outsider.token}`);
+  const outsiderTicket = await env.streamTicket(outsider.token);
+  const events = await fetch(`${env.baseUrl}/api/multiplayer/sessions/${sessionId}/events?ticket=${outsiderTicket}`);
   assert.equal(events.status, 403);
+  // Uzun ömürlü oturum token'ı URL'de kabul edilmez; yalnızca akış bileti.
+  const sessionToken = await fetch(`${env.baseUrl}/api/multiplayer/sessions/${sessionId}/events?ticket=${host.token}`);
+  assert.equal(sessionToken.status, 401);
   const noToken = await fetch(`${env.baseUrl}/api/multiplayer/sessions/${sessionId}/events`);
   assert.equal(noToken.status, 401);
 });
@@ -168,11 +191,15 @@ test('session details include both players with usernames', async () => {
 
 test('leaving a started match is a forfeit: the other player wins regardless of money', async () => {
   const { host, guest, sessionId } = await matchPair();
-  const guestStream = env.openStream(`/multiplayer/sessions/${sessionId}/events?token=${guest.token}`);
+  const guestStream = env.openStream(`/multiplayer/sessions/${sessionId}/events`, guest.token);
   await guestStream.ready;
 
+  // Maç başladı: host 4. hücredeki kutudan +₺90K kazandı (host daha zengin).
+  const state = onlineState({ names: [host.username, guest.username], money: [1_090_000, 1_000_000], pos: [4, 0] });
+  const init = await env.api('PUT', `/multiplayer/sessions/${sessionId}/state`, { token: host.token, body: { state_data: state, event_type: 'dice_roll' } });
+  assert.equal(init.status, 200);
+
   // Host parası daha fazla olsa bile oyunu terk ettiği için kaybeder.
-  const state = { players: [{ name: host.username, money: 5000 }, { name: guest.username, money: 10 }], currentPlayer: 0, turnCount: 2 };
   const res = await env.api('POST', `/multiplayer/sessions/${sessionId}/finish`, {
     token: host.token, body: { state_data: state, result_data: { reason: 'forfeit' } }
   });
@@ -188,10 +215,30 @@ test('leaving a started match is a forfeit: the other player wins regardless of 
 
 test('finishing a match records stats once and closes the session', async () => {
   const { host, guest, sessionId } = await matchPair();
-  const hostStream = env.openStream(`/multiplayer/sessions/${sessionId}/events?token=${host.token}`);
+  const hostStream = env.openStream(`/multiplayer/sessions/${sessionId}/events`, host.token);
   await hostStream.ready;
 
-  const finalState = { players: [{ name: host.username, money: 100 }, { name: guest.username, money: 900 }], currentPlayer: 1, turnCount: 7 };
+  // Host İstanbul'u (₺100K) aldı ve sırayı devretti; süre dolduğunda guest daha zengin.
+  const names = [host.username, guest.username];
+  const bought = await env.api('PUT', `/multiplayer/sessions/${sessionId}/state`, {
+    token: host.token, body: { state_data: onlineState({ names, money: [900_000, 1_000_000], owned: [[0], []] }), event_type: 'buy_city' }
+  });
+  assert.equal(bought.status, 200);
+  const handOver = await env.api('PUT', `/multiplayer/sessions/${sessionId}/state`, {
+    token: host.token, body: { state_data: onlineState({ names, money: [900_000, 1_000_000], owned: [[0], []], currentPlayer: 1 }), event_type: 'end_turn', version: bought.body.updated_at }
+  });
+  assert.equal(handOver.status, 200);
+
+  // Süre dolmadan "time" ile bitirilemez.
+  const early = await env.api('POST', `/multiplayer/sessions/${sessionId}/finish`, {
+    token: guest.token, body: { state_data: {}, result_data: { reason: 'time' } }
+  });
+  assert.equal(early.status, 409);
+  await ageSession(env.db, sessionId);
+
+  // İstemcinin iddia ettiği kurallara aykırı son durum yok sayılır; sonuç sunucunun kabul
+  // ettiği durumdan çıkar.
+  const finalState = onlineState({ names, money: [100, 9_999_999], currentPlayer: 1, turnCount: 7 });
   const finish = await env.api('POST', `/multiplayer/sessions/${sessionId}/finish`, {
     token: guest.token, body: { state_data: finalState, result_data: { reason: 'time' } }
   });
@@ -200,8 +247,11 @@ test('finishing a match records stats once and closes the session', async () => 
   const finishedEvent = await hostStream.next(e => e.type === 'finished');
   assert.equal(finishedEvent.result_data.reason, 'time');
 
+  assert.equal(finishedEvent.state_data.players[0].money, 900_000);
+  assert.equal(finishedEvent.state_data.players[1].money, 1_000_000);
+
   const again = await env.api('POST', `/multiplayer/sessions/${sessionId}/finish`, {
-    token: host.token, body: { state_data: finalState, result_data: {} }
+    token: host.token, body: { state_data: finalState, result_data: { reason: 'time' } }
   });
   assert.equal(again.status, 409);
 

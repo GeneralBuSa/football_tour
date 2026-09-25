@@ -85,3 +85,41 @@ test('home page ships VideoGame and rules page ships FAQPage structured data', {
   assert.match(page('index'), /"@type":"VideoGame"/);
   assert.match(page('rules'), /"@type":"FAQPage"/);
 });
+
+test('fonts are self-hosted: no render-blocking request to Google Fonts', { skip }, () => {
+  [...PUBLIC_PAGES, ...PRIVATE_PAGES].forEach(name => {
+    const html = page(name);
+    assert.doesNotMatch(html, /fonts\.(googleapis|gstatic)\.com/, `${name}: harici font isteği`);
+    assert.match(html, /rel="preload" href="\/_next\/static\/media\/[^"]+\.woff2" as="font"/, `${name}: font preload yok`);
+  });
+});
+
+test('every local asset referenced by the exported pages exists', { skip }, () => {
+  const missing = new Set();
+  [...PUBLIC_PAGES, ...PRIVATE_PAGES, '404'].forEach(name => {
+    const html = page(name);
+    const refs = [
+      ...[...html.matchAll(/(?:src|href|poster)="\/?((?:assets|docs|draco)\/[^"?#]+)"/g)].map(m => m[1]),
+      ...[...html.matchAll(/url\((?:&#x27;|&quot;|['"])?\/?(assets\/[^'")&]+)/g)].map(m => m[1])
+    ];
+    assert.ok(refs.length > 0, `${name}: hiç yerel varlık bulunamadı (regex bozuk olabilir)`);
+    refs.forEach(ref => { if (!existsSync(path.join(outDir, ref))) missing.add(`${name}: ${ref}`); });
+  });
+  assert.deepEqual([...missing], []);
+});
+
+test('subpage navigation uses client-side links; the home page is always a full load', { skip }, () => {
+  // Ana sayfa oyun motorunu her açılışta sıfırdan kurar; oraya giden bağlantı Link olmamalı.
+  // Next.js Link'leri prefetch için RSC verisini (<route>.txt) kullanır; dosyalar üretilmiş olmalı.
+  ['history', 'profile', 'achievements', 'store', 'settings', 'rules', 'privacy', 'terms', 'battlepass'].forEach(name => {
+    assert.ok(existsSync(path.join(outDir, `${name}.txt`)), `${name}.txt (istemci geçişi verisi) eksik`);
+  });
+});
+
+test('client-side prefetch segment files use the flat names the router requests', { skip }, () => {
+  // Windows'ta Next.js bu dosyaları klasör olarak yazar; scripts/fix-export-segments.mjs düzeltir.
+  ['history', 'profile', 'achievements', 'store', 'settings', 'rules', 'privacy', 'terms', 'battlepass'].forEach(name => {
+    assert.ok(existsSync(path.join(outDir, name, `__next.${name}.__PAGE__.txt`)), `${name}: prefetch segment dosyası eksik`);
+    assert.ok(!existsSync(path.join(outDir, name, `__next.${name}`)), `${name}: klasör olarak kalmış`);
+  });
+});

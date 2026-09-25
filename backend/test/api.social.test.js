@@ -131,7 +131,7 @@ test('friends can exchange messages; history is ordered and unread counts clear 
 
 test('messages are delivered live over the user stream and presence is reported', async () => {
   const { a, b } = await makeFriends();
-  const stream = env.openStream(`/messages/stream?token=${b.token}`);
+  const stream = env.openStream(`/messages/stream`, b.token);
   await stream.ready;
   await stream.next(e => e.type === 'connected');
 
@@ -164,8 +164,10 @@ test('messaging is restricted to accepted friends and validates the body', async
   assert.equal((await env.api('POST', '/messages', { token: a.token, body: { friend_id: b.id, body: 'x'.repeat(501) } })).status, 400);
   assert.equal((await env.api('POST', '/messages', { token: a.token, body: { friend_id: 'abc', body: 'hey' } })).status, 400);
   assert.equal((await env.api('POST', '/messages', { body: { friend_id: b.id, body: 'hey' } })).status, 401);
-  const stream = await fetch(`${env.baseUrl}/api/messages/stream?token=bad`);
+  const stream = await fetch(`${env.baseUrl}/api/messages/stream?ticket=bad`);
   assert.equal(stream.status, 401);
+  const sessionToken = await fetch(`${env.baseUrl}/api/messages/stream?ticket=${a.token}`);
+  assert.equal(sessionToken.status, 401, "oturum token'ı akış bileti yerine geçmemeli");
 });
 
 test('game invite requires an open private room and reaches the friend', async () => {

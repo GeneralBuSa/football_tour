@@ -1,12 +1,10 @@
 import apiService from './ApiService.js';
 
-const API_BASE = process.env.NEXT_PUBLIC_API_BASE_URL || 'http://localhost:8000/api';
 const IGNORED_EVENTS = new Set(['connected', 'heartbeat', 'player_joined']);
 
 export class MultiplayerService {
-  constructor({ api = apiService, apiBase = API_BASE } = {}) {
+  constructor({ api = apiService } = {}) {
     this._api = api;
-    this._apiBase = apiBase;
     this._sessionId = null;
     this._events = null;
     this._applyingRemoteState = false;
@@ -137,7 +135,13 @@ export class MultiplayerService {
     }
     if (this._sessionId !== sessionId) return;
 
-    const url = `${this._apiBase}/multiplayer/sessions/${sessionId}/events?token=${encodeURIComponent(token)}`;
+    // URL'de oturum token'ı yerine kısa ömürlü akış bileti taşınır.
+    const url = await this._api.createStreamUrl(`/multiplayer/sessions/${sessionId}/events`);
+    if (this._sessionId !== sessionId) return;
+    if (!url) {
+      this._scheduleReconnect(sessionId);
+      return;
+    }
     if (this._events) this._events.close();
 
     this._events = new EventSource(url);
@@ -158,15 +162,18 @@ export class MultiplayerService {
       console.warn('[MultiplayerService] bağlantı koptu, yeniden bağlanılıyor...');
       if (this._events) this._events.close();
       this._events = null;
-
-      const backoff = Math.min(1000 * Math.pow(2, this._reconnectAttempts), 16000);
-      this._reconnectAttempts++;
-
-      if (this._reconnectTimeout) clearTimeout(this._reconnectTimeout);
-      this._reconnectTimeout = setTimeout(() => {
-        if (this._sessionId === sessionId) this._connect();
-      }, backoff);
+      this._scheduleReconnect(sessionId);
     };
+  }
+
+  _scheduleReconnect(sessionId) {
+    const backoff = Math.min(1000 * Math.pow(2, this._reconnectAttempts), 16000);
+    this._reconnectAttempts++;
+
+    if (this._reconnectTimeout) clearTimeout(this._reconnectTimeout);
+    this._reconnectTimeout = setTimeout(() => {
+      if (this._sessionId === sessionId) this._connect();
+    }, backoff);
   }
 
   stop() {

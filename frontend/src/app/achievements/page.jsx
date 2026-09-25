@@ -5,7 +5,7 @@ import PageShell from '../shared/PageShell.jsx';
 import gameService from '../../../services/GameService.js';
 
 export default function Page() {
-  const { isLoggedIn, user, stats, language, mounted, gameReady, t } = useSession();
+  const { stats, language, gameReady, t } = useSession();
   const [achievements, setAchievements] = useState([]);
   const [loading, setLoading] = useState(true);
 
@@ -26,7 +26,7 @@ export default function Page() {
   }, [gameReady]);
 
   return (
-    <PageShell activePage="achievements" stats={stats} t={t} mounted={mounted}>
+    <PageShell activePage="achievements" stats={stats} t={t} language={language}>
       <div className="menu-dynamic-screen">
         <div className="dynamic-screen-header" style={{position: 'relative', display: 'flex', justifyContent: 'center', alignItems: 'center'}}>
           <button className="btn-mode-back" onClick={() => {window.location.href='/'}} style={{position: 'absolute', left: '0', margin: '0', padding: '6px 12px', fontSize: '12px'}}>← {t.back}</button>

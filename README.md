@@ -106,7 +106,7 @@ Schema şunları oluşturur:
 
 Ayrıca futbolcu kataloğunu (Architect/King: 500 coin, Viking/Rocket/Wizard: 300 coin) ve coin paketlerini seed eder. Coin paketleri: 100 coin = 1,50 USD; 300 coin = 4 USD; 500 coin = 5 USD; 1000 coin = 8 USD. Coin yükleme için Stripe Checkout oturumu oluşturulur; coin yalnızca imzalı webhook ile başarılı ödeme sonrasında verilir.
 
-Meshy’den gelen ayrı oyuncu modelleri `frontend/public/assets/players/` altında standart adlarla tutulur: `architect.glb`, `king.glb`, `viking.glb`, `rocket.glb`, `wizard.glb`. Bu web dosyaları Draco ile optimize edilmiştir; orijinal büyük dosyalar `tools/blender/source-models/` altında saklanır. Web tarafındaki katalog bu yolları `frontend/js/data/playerCatalog.js` üzerinden kullanır.
+Meshy’den gelen ayrı oyuncu modelleri `frontend/public/assets/players/` altında standart adlarla tutulur: `architect.glb`, `king.glb`, `viking.glb`, `rocket.glb`, `wizard.glb`. Bu tam çözünürlüklü dosyalar yalnızca `/showcase` sayfasında kullanılır; oyun tahtası Draco ile sıkıştırılmış hafif kopyaları (`frontend/public/assets/players/game/*.glb`, ~400 KB) yükler. Web tarafındaki katalog bu yolları `frontend/js/data/playerCatalog.js` üzerinden kullanır.
 
 ### Frontend
 
@@ -186,7 +186,6 @@ Yeni bir özellik eklerken ilgili `api.*.test.js` dosyasına senaryo eklemek yet
 - Oyun state'i hâlâ istemciden gelir; tam server-authoritative command modeline geçilmelidir.
 - Şifre sıfırlama token'ları hash'lenerek `password_reset_tokens` tablosunda saklanır ve tek kullanımlıdır.
 - `frontend/public/assets/players/*.glb` dosyaları ~30 MB'tır (yalnızca `/showcase` sayfasında yüklenir); dokular sıkıştırılarak (ör. `gltf-transform` ile WebP doku) küçültülmelidir.
-- Google Fonts üçüncü taraf sunucudan yüklenir; tam KVKK/GDPR uyumu için fontlar self-host edilebilir.
 - `frontend/out` build çıktısı ignore edilir; dağıtım için build çıktısı CI/CD tarafında üretilmelidir.
 
 ## Lisans

@@ -355,10 +355,13 @@ class ApiService {
     return await this._post('/lobby/create-private', {});
   }
 
-  async joinPrivateLobby(hostUsername) {
+  // roomCode: oda sahibinin paylaştığı 6 haneli kod. Davetle katılırken gerekmez.
+  async joinPrivateLobby(hostUsername, roomCode = null) {
     const user = this.getUser();
     if (!user) return { error: 'Giriş yapılmadı' };
-    return await this._post('/lobby/join-private', { host_username: hostUsername });
+    const body = { host_username: hostUsername };
+    if (roomCode) body.room_code = roomCode;
+    return await this._post('/lobby/join-private', body);
   }
 
   // ==========================================
@@ -418,9 +421,18 @@ class ApiService {
     return await this._get('/messages/unread');
   }
 
-  getMessageStreamUrl() {
-    const token = this.token;
-    return token ? `${API_BASE}/messages/stream?token=${encodeURIComponent(token)}` : null;
+  // Canlı akış (SSE) adresi. EventSource başlık gönderemediği için URL'de oturum token'ı
+  // yerine sunucudan alınan 60 saniyelik tek amaçlı bilet taşınır (kayıtlara düşse bile
+  // kısa sürede geçersizleşir). Bilet alınamazsa null döner.
+  async createStreamUrl(path) {
+    if (!this.token) return null;
+    const res = await this._post('/auth/stream-ticket', {});
+    if (!res || res.error || typeof res.ticket !== 'string') return null;
+    return `${API_BASE}${path}${path.includes('?') ? '&' : '?'}ticket=${encodeURIComponent(res.ticket)}`;
+  }
+
+  async getMessageStreamUrl() {
+    return this.createStreamUrl('/messages/stream');
   }
 
   // ==========================================

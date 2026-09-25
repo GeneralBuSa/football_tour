@@ -1,5 +1,6 @@
 'use client';
 import { useEffect, useState } from 'react';
+import Link from 'next/link';
 import useSession from '../shared/useSession.js';
 import PageShell from '../shared/PageShell.jsx';
 import apiService from '../../../services/ApiService.js';
@@ -347,9 +348,9 @@ export default function SettingsPage() {
 
             {/* Alt Bilgi & Destek Bağlantıları */}
             <nav className="settings-footer-grid" aria-label={isEn ? 'Help and legal' : 'Yardım ve yasal'}>
-              <a href="/privacy" style={footerButton('#2ecc71', '46, 204, 113')}>{t.privacy_policy}</a>
-              <a href="/terms" style={footerButton('#29b6f6', '41, 182, 246')}>{t.terms_of_service}</a>
-              <a href="/rules" style={footerButton('#ffb74d', '255, 183, 77')}>{t.rules}</a>
+              <Link href="/privacy" style={footerButton('#2ecc71', '46, 204, 113')}>{t.privacy_policy}</Link>
+              <Link href="/terms" style={footerButton('#29b6f6', '41, 182, 246')}>{t.terms_of_service}</Link>
+              <Link href="/rules" style={footerButton('#ffb74d', '255, 183, 77')}>{t.rules}</Link>
               <button type="button" onClick={() => setShowCreditsModal(true)} style={footerButton('#e1bee7', '156, 39, 176')}>
                 {t.credits || 'Emeği Geçenler'}
               </button>

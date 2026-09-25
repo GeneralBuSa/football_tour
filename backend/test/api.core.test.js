@@ -119,7 +119,8 @@ test('account deletion requires the password and removes all related data', asyn
   const deleted = await env.api('DELETE', '/auth/account', { token: user.token, body: { password: user.password } });
   assert.equal(deleted.status, 200);
 
-  assert.equal((await env.api('GET', '/auth/me', { token: user.token })).status, 404);
+  // Silinen hesabın token'ı artık hiçbir uç noktada oturum olarak kabul edilmez.
+  assert.equal((await env.api('GET', '/auth/me', { token: user.token })).status, 401);
   const login = await env.api('POST', '/auth/login', { body: { username: user.username, password: user.password } });
   assert.equal(login.status, 400);
   const { rows } = await env.db.query(

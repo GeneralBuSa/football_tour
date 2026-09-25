@@ -2,7 +2,7 @@
    CSS DEĞİŞKENLERİ — Renk, font, spacing token'ları
    ========================================== */
 
-/* Web fontları src/app/layout.jsx içinde preconnect + <link> ile paralel yüklenir. */
+/* Web fontları src/app/layout.jsx içinde next/font ile yüklenir (--font-rajdhani/outfit/jakarta). */
 
 :root {
   --gold: #f5d061;
@@ -27,9 +27,9 @@
   --text-inverse: #0a0a0a;
 
   /* Typography */
-  --font-display: 'Rajdhani', 'Outfit', sans-serif;
-  --font-title: 'Outfit', 'Rajdhani', sans-serif;
-  --font-body: 'Plus Jakarta Sans', sans-serif;
+  --font-display: var(--font-rajdhani), var(--font-outfit), sans-serif;
+  --font-title: var(--font-outfit), var(--font-rajdhani), sans-serif;
+  --font-body: var(--font-jakarta), sans-serif;
   --font-mono: 'Geist', monospace;
 
   /* Legacy Karanlık tema değişkenleri (Korunması gerekenler) */

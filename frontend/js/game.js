@@ -13,11 +13,10 @@ import { buyCity, upgradeStadium, openLootBox, closeLoot } from './engine/econom
 
 // UI modülleri
 import { switchTab, renderPanel } from './ui/panel.js';
-import { openCityModal, closeModal, showAchievementsModal } from './ui/modal.js';
+import { openCityModal, closeModal } from './ui/modal.js';
 import {
   playLocalGame, showOnlineLobby, showGameModeSelection, hideGameModeSelection,
-  toggleSocialPanel, switchSocialTab, toggleOfflineAccordion,
-  showHome, showProfile, showBattlePass, showStore, showAchievements, showMatchHistory,
+  toggleSocialPanel, switchSocialTab, showHome,
   showPrivateRoomSelection, createPrivateRoomAction, joinPrivateRoomAction, joinPrivateRoomByHost
 } from './ui/menu.js';
 import {
@@ -55,16 +54,9 @@ window.joinPrivateRoomByHost = joinPrivateRoomByHost;
 window.toggleSocialPanel = toggleSocialPanel;
 window.switchSocialTab = switchSocialTab;
 window.showHome = showHome;
-window.showProfile = showProfile;
-window.showBattlePass = showBattlePass;
-window.showStore = showStore;
-window.showAchievements = showAchievements;
-window.showMatchHistory = showMatchHistory;
-window.toggleOfflineAccordion = toggleOfflineAccordion;
 window.toggleTheme = toggleTheme;
 window.confirmExitToMenu = confirmExitToMenu;
 window.exitToMainMenu = exitToMainMenu;
-window.showAchievementsModal = showAchievementsModal;
 window.showGameModeSelection = showGameModeSelection;
 window.hideGameModeSelection = hideGameModeSelection;
 window.update3DPawnsTargetPositions = update3DPawnsTargetPositions;

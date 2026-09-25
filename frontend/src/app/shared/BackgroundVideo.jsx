@@ -16,29 +16,47 @@ export function shouldPlayBackgroundVideo(win = typeof window !== 'undefined' ? 
   return true;
 }
 
+// Sayfalar arası istemci tarafı geçişte aynı <video> öğesi yeni sayfaya taşınır:
+// video yeniden indirilmez ve baştan başlamaz, kaldığı yerden oynamaya devam eder.
+let sharedVideo = null;
+
+function createVideo() {
+  const video = document.createElement('video');
+  video.className = 'menu-video-bg';
+  video.muted = true;
+  video.loop = true;
+  video.playsInline = true;
+  video.setAttribute('playsinline', '');
+  video.setAttribute('aria-hidden', 'true');
+  video.tabIndex = -1;
+  video.poster = POSTER_SRC;
+  video.src = VIDEO_SRC;
+  return video;
+}
+
 export default function BackgroundVideo({ id = 'bg-video' }) {
-  const videoRef = useRef(null);
+  const hostRef = useRef(null);
 
   useEffect(() => {
-    const video = videoRef.current;
-    if (!video || !shouldPlayBackgroundVideo()) return;
-    video.src = VIDEO_SRC;
+    const host = hostRef.current;
+    if (!host || !shouldPlayBackgroundVideo()) return undefined;
+    if (!sharedVideo) sharedVideo = createVideo();
+    const video = sharedVideo;
+    video.id = id;
+    host.appendChild(video);
     video.play().catch(() => { /* otomatik oynatma engellenirse poster kalır */ });
-  }, []);
+    return () => {
+      if (video.parentNode === host) host.removeChild(video);
+    };
+  }, [id]);
 
+  // Poster, JS yüklenmeden de görünsün diye sunucu HTML'inde arka plan olarak çizilir.
   return (
-    <video
-      ref={videoRef}
-      id={id}
+    <div
+      ref={hostRef}
       className="menu-video-bg"
-      muted
-      loop
-      playsInline
-      preload="none"
-      poster={POSTER_SRC}
+      style={{ backgroundImage: `url('${POSTER_SRC}')`, backgroundSize: 'cover', backgroundPosition: 'center' }}
       aria-hidden="true"
-      tabIndex={-1}
-      suppressHydrationWarning
     />
   );
 }

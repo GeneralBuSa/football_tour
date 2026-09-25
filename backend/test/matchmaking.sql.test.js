@@ -130,13 +130,17 @@ test('leaving a session that already has game state does not cancel it', async (
   assert.equal(cancelled, null);
 });
 
-test('private room: guest joins host by username', async () => {
+test('private room: guest joins host with the room code', async () => {
   await clearQueue();
   const host = await createUser('host');
   const guest = await createUser('guest');
-  await db.query("INSERT INTO lobby_queue (user_id, status) VALUES ($1, 'waiting_private')", [host.id]);
+  await db.query("INSERT INTO lobby_queue (user_id, status, room_code) VALUES ($1, 'waiting_private', 'K7PX2M')", [host.id]);
 
-  const [joined] = await call('join_private_session', guest.id, host.username);
+  // Kullanıcı adını bilmek yetmez: kod yoksa veya yanlışsa katılınamaz.
+  await assert.rejects(call('join_private_session', guest.id, host.username, null), /ROOM_CODE_INVALID/);
+  await assert.rejects(call('join_private_session', guest.id, host.username, 'AAAAAA'), /ROOM_CODE_INVALID/);
+
+  const [joined] = await call('join_private_session', guest.id, host.username, ' k7px2m ');
   assert.equal(joined.status, 'matched');
   assert.equal(joined.matched_username, host.username);
 
@@ -146,23 +150,38 @@ test('private room: guest joins host by username', async () => {
   assert.equal(hostPoll.session_id, joined.session_id);
 });
 
+test('private room: a friend invited after the room was opened can join without the code', async () => {
+  await clearQueue();
+  const host = await createUser('host');
+  const friend = await createUser('friend');
+  await db.query("INSERT INTO lobby_queue (user_id, status, room_code, created_at) VALUES ($1, 'waiting_private', 'Q2W3E4', now() - interval '1 minute')", [host.id]);
+
+  // Oda kurulmadan önceki eski bir davet geçerli değildir.
+  await db.query("INSERT INTO direct_messages (sender_id, recipient_id, kind, body, created_at) VALUES ($1, $2, 'game_invite', 'eski', now() - interval '1 hour')", [host.id, friend.id]);
+  await assert.rejects(call('join_private_session', friend.id, host.username, null), /ROOM_CODE_INVALID/);
+
+  await db.query("INSERT INTO direct_messages (sender_id, recipient_id, kind, body) VALUES ($1, $2, 'game_invite', 'gel')", [host.id, friend.id]);
+  const [joined] = await call('join_private_session', friend.id, host.username, null);
+  assert.equal(joined.status, 'matched');
+});
+
 test('private room errors: unknown host, own room, full or stale room', async () => {
   await clearQueue();
   const host = await createUser('host');
   const guest = await createUser('guest');
   const lateGuest = await createUser('late');
 
-  await assert.rejects(call('join_private_session', guest.id, 'nobody_here'), /HOST_NOT_FOUND/);
-  await db.query("INSERT INTO lobby_queue (user_id, status) VALUES ($1, 'waiting_private')", [host.id]);
-  await assert.rejects(call('join_private_session', host.id, host.username), /CANNOT_JOIN_OWN_ROOM/);
-  await call('join_private_session', guest.id, host.username);
-  await assert.rejects(call('join_private_session', lateGuest.id, host.username), /PRIVATE_ROOM_UNAVAILABLE/);
+  await assert.rejects(call('join_private_session', guest.id, 'nobody_here', 'ROOM01'), /HOST_NOT_FOUND/);
+  await db.query("INSERT INTO lobby_queue (user_id, status, room_code) VALUES ($1, 'waiting_private', 'ROOM01')", [host.id]);
+  await assert.rejects(call('join_private_session', host.id, host.username, 'ROOM01'), /CANNOT_JOIN_OWN_ROOM/);
+  await call('join_private_session', guest.id, host.username, 'ROOM01');
+  await assert.rejects(call('join_private_session', lateGuest.id, host.username, 'ROOM01'), /PRIVATE_ROOM_UNAVAILABLE/);
 
   const staleHost = await createUser('stale');
   await db.query(
-    "INSERT INTO lobby_queue (user_id, status, last_seen) VALUES ($1, 'waiting_private', now() - interval '1 hour')", [staleHost.id]
+    "INSERT INTO lobby_queue (user_id, status, last_seen, room_code) VALUES ($1, 'waiting_private', now() - interval '1 hour', 'STALE1')", [staleHost.id]
   );
-  await assert.rejects(call('join_private_session', lateGuest.id, staleHost.username), /PRIVATE_ROOM_UNAVAILABLE/);
+  await assert.rejects(call('join_private_session', lateGuest.id, staleHost.username, 'STALE1'), /PRIVATE_ROOM_UNAVAILABLE/);
 });
 
 test('apply_session_result updates games, wins and xp for both participants', async () => {

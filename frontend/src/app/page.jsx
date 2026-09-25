@@ -819,7 +819,7 @@ export default function App() {
                         padding: '6px 8px',
                         fontSize: '11px',
                         fontWeight: '600',
-                        fontFamily: "'Outfit', sans-serif",
+                        fontFamily: "var(--font-outfit), sans-serif",
                         cursor: 'pointer',
                         border: 'none',
                         textAlign: 'left'
@@ -894,7 +894,7 @@ export default function App() {
                         outline: 'none',
                         color: '#ffffff',
                         fontSize: '13px',
-                        fontFamily: "'Outfit', sans-serif",
+                        fontFamily: "var(--font-outfit), sans-serif",
                         flex: 1,
                         minWidth: 0
                       }}
@@ -926,7 +926,7 @@ export default function App() {
                         outline: 'none',
                         color: '#ffffff',
                         fontSize: '13px',
-                        fontFamily: "'Outfit', sans-serif"
+                        fontFamily: "var(--font-outfit), sans-serif"
                       }}
                     />
                     <button type="submit" disabled={chatSending || !chatText.trim()} aria-label="Mesajı gönder" style={{ background: 'transparent', border: 'none', color: chatText.trim() ? '#00e5ff' : '#555', cursor: chatText.trim() ? 'pointer' : 'default', fontSize: '14px', minWidth: '28px', minHeight: '28px' }}>

@@ -4,7 +4,7 @@
 
 import { CITIES } from '../data/cities.js';
 import { PLAYERS, currentPlayer, setTutorialText } from './state.js';
-import { boardCells, buildBoard } from './board.js';
+import { buildBoard } from './board.js';
 import { addLog, showNotif, updateTutorialHUD } from '../ui/panel.js';
 import { closeModal, openCityModal } from '../ui/modal.js';
 import { renderPlayers, syncMultiplayerState } from './player.js';

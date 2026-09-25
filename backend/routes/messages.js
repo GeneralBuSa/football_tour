@@ -1,7 +1,6 @@
 import express from 'express';
-import jwt from 'jsonwebtoken';
 import { supabase } from '../db.js';
-import { createAuthMiddleware, requireEnv } from '../middleware/auth.js';
+import { createAuthMiddleware, requireEnv, verifyStreamTicket } from '../middleware/auth.js';
 import { createRateLimiter, validateObjectBody } from '../middleware/security.js';
 import { openEventStream, publishToUser, subscribeToUser } from '../services/realtime.js';
 import { areFriends } from './friends.js';
@@ -47,17 +46,11 @@ async function insertMessage(res, { senderId, senderUsername, recipientId, kind,
 }
 
 // Kullanıcıya özel canlı bildirim akışı (mesajlar, arkadaşlık değişiklikleri).
-// EventSource custom header gönderemediği için token query string ile gelir.
+// EventSource custom header gönderemediği için kısa ömürlü bilet query string ile gelir
+// (POST /api/auth/stream-ticket). Uzun ömürlü oturum token'ı burada kabul edilmez.
 router.get('/stream', async (req, res) => {
-  const token = req.query.token;
-  if (!token) return res.status(401).end();
-
-  let user;
-  try {
-    user = jwt.verify(token, jwtSecret);
-  } catch {
-    return res.status(401).end();
-  }
+  const user = verifyStreamTicket(req.query.ticket, jwtSecret);
+  if (!user) return res.status(401).end();
 
   const friendIds = await getAcceptedFriendIds(user.id).catch(() => []);
   const send = openEventStream(req, res, () => {

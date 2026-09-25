@@ -5,7 +5,7 @@ import PageShell from '../shared/PageShell.jsx';
 import EmptyState from '../shared/EmptyState.jsx';
 
 export default function Page() {
-  const { isLoggedIn, user, stats, language, mounted, gameReady, t, apiService } = useSession({ loadGame: false });
+  const { isLoggedIn, user, stats, language, gameReady, t, apiService } = useSession();
   const [history, setHistory] = useState([]);
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState('');
@@ -30,7 +30,7 @@ export default function Page() {
   }, [gameReady, isLoggedIn, user]);
 
   return (
-    <PageShell activePage="history" stats={stats} t={t} mounted={mounted}>
+    <PageShell activePage="history" stats={stats} t={t} language={language}>
       <div className="menu-dynamic-screen">
         <div className="dynamic-screen-header" style={{display: 'flex', alignItems: 'center', gap: '16px'}}>
           <button className="btn-mode-back" onClick={() => {window.location.href='/'}} style={{margin: '0', padding: '6px 12px', fontSize: '12px'}}>← {t.back}</button>

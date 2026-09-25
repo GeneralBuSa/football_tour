@@ -5,12 +5,12 @@
     "type": "module",
     "scripts": {
         "dev": "next dev",
-        "build": "next build",
+        "build": "next build && node scripts/fix-export-segments.mjs",
         "start": "next start",
         "tauri": "tauri",
         "check": "next build",
         "test": "node --test \"test/**/*.test.js\"",
-        "test:unit": "node --test test/engine.test.js test/services.test.js test/multiplayer.test.js test/board3d.test.js",
+        "test:unit": "node --test test/engine.test.js test/services.test.js test/multiplayer.test.js test/board3d.test.js test/ui.test.js test/stateRules.test.js",
         "test:build": "node --test test/build.smoke.test.js"
     },
     "engines": {

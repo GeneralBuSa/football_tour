@@ -1,16 +1,23 @@
 import express from 'express';
 import { supabase } from '../db.js';
-import jwt from 'jsonwebtoken';
-import { createAuthMiddleware, requireEnv } from '../middleware/auth.js';
+import { createAuthMiddleware, requireEnv, verifyStreamTicket } from '../middleware/auth.js';
 import { validateObjectBody } from '../middleware/security.js';
 import { openEventStream, publishToSession, subscribeToSession } from '../services/realtime.js';
 import { sendDbError } from '../middleware/errors.js';
+import {
+  GAME_DURATION_SECONDS, hasGameState, initialState, validateStateTransition
+} from '../game/stateRules.js';
 
 const router = express.Router();
 const authenticate = createAuthMiddleware();
 const jwtSecret = requireEnv('JWT_SECRET');
 const CLOSED_STATUSES = ['finished', 'cancelled'];
 const EVENT_TYPE_PATTERN = /^[a-z_]{1,32}$/;
+// Tur sayısı istemciden gelir; istatistiğe (integer sütun) yazılmadan önce sınırlandırılır.
+const MAX_TURNS = 10_000;
+const FINISH_REASONS = ['bankruptcy', 'time', 'forfeit'];
+// Süre bitimi iddiası, maç oluşturulduktan en az bu kadar sonra kabul edilir.
+const TIME_TOLERANCE_SECONDS = 60;
 
 async function ensureParticipant(sessionId, userId) {
   const { data, error } = await supabase
@@ -39,62 +46,9 @@ export function getWinnerIndex(stateData) {
   return winner;
 }
 
-router.post('/sessions', authenticate, validateObjectBody, async (req, res) => {
-  const { mode = 'private' } = req.body || {};
-  if (!['private', 'matchmaking'].includes(mode)) {
-    return res.status(400).json({ error: 'Invalid session mode' });
-  }
-
-  const { data: session, error } = await supabase
-    .from('game_sessions')
-    .insert([{ host_user_id: req.user.id, status: 'waiting', mode, state_data: {} }])
-    .select()
-    .single();
-
-  if (error) return sendDbError(res, error);
-
-  const { error: playerError } = await supabase
-    .from('game_session_players')
-    .insert([{ session_id: session.id, user_id: req.user.id, role: 'host' }]);
-
-  if (playerError) return sendDbError(res, playerError);
-
-  res.json(session);
-});
-
-router.post('/sessions/:sessionId/join', authenticate, validateObjectBody, async (req, res) => {
-  const { sessionId } = req.params;
-
-  const { data: session, error: sessionError } = await supabase
-    .from('game_sessions')
-    .select('*')
-    .eq('id', sessionId)
-    .single();
-
-  if (sessionError || !session) return res.status(404).json({ error: 'Session not found' });
-  if (CLOSED_STATUSES.includes(session.status)) return res.status(409).json({ error: 'Session is already closed' });
-
-  const { count: playerCount, error: countError } = await supabase
-    .from('game_session_players')
-    .select('*', { count: 'exact', head: true })
-    .eq('session_id', sessionId);
-  if (countError) return res.status(500).json({ error: 'Failed to inspect session capacity' });
-  if (playerCount >= 2) return res.status(409).json({ error: 'Session is full' });
-
-  const { error: joinError } = await supabase
-    .from('game_session_players')
-    .upsert([{ session_id: sessionId, user_id: req.user.id, role: 'guest' }], { onConflict: 'session_id,user_id' });
-
-  if (joinError) return sendDbError(res, joinError);
-
-  await supabase
-    .from('game_sessions')
-    .update({ status: 'active', updated_at: new Date().toISOString() })
-    .eq('id', sessionId);
-
-  await broadcastSession(sessionId, { type: 'player_joined', user_id: req.user.id });
-  res.json({ success: true, session_id: sessionId });
-});
+// Oturumlar yalnızca lobi eşleştirmesi ve özel oda akışıyla (routes/lobby.js) oluşturulur.
+// Eskiden burada kimliği bilen herkesin özel odaya katılabildiği doğrudan
+// oluşturma/katılma uç noktaları vardı; istemci kullanmıyordu, kaldırıldı.
 
 router.get('/sessions/:sessionId', authenticate, async (req, res) => {
   const { sessionId } = req.params;
@@ -181,7 +135,20 @@ router.put('/sessions/:sessionId/state', authenticate, validateObjectBody, async
       }
     }
 
-    // 5. Güncelleme işlemini son görülen sürüme koşullandır. Böylece paralel
+    // 5. Oyun kuralları: son kabul edilen durumdan bu duruma kurallara uygun bir hamleyle
+    // geçilebilir mi? (para, şehir, stadyum ve sıra denetimi — bkz. game/stateRules.js)
+    // Eski sürüme dayanan yazma, kural denetiminden önce "stale" olarak bildirilir ki
+    // istemci sunucudaki güncel durumu çekip uygulasın (kesin eşitlik yine UPDATE'te aranır).
+    if (version && Date.parse(version) !== Date.parse(session.updated_at)) {
+      return res.status(409).json({ error: 'Stale state update ignored', db_version: session.updated_at });
+    }
+    const previousState = hasGameState(session.state_data) ? session.state_data : initialState(players.length);
+    const rules = validateStateTransition(previousState, state_data);
+    if (!rules.ok) {
+      return res.status(422).json({ error: 'Invalid game state', reason: rules.reason });
+    }
+
+    // 6. Güncelleme işlemini son görülen sürüme koşullandır. Böylece paralel
     // istemcilerden yalnızca biri aynı state sürümünü güncelleyebilir.
     let updateQuery = supabase
       .from('game_sessions')
@@ -231,14 +198,51 @@ router.post('/sessions/:sessionId/finish', authenticate, validateObjectBody, asy
   if (JSON.stringify(state_data).length > 200_000 || JSON.stringify(result_data).length > 100_000) {
     return res.status(413).json({ error: 'Game result is too large' });
   }
+  const reason = result_data.reason;
+  if (!FINISH_REASONS.includes(reason)) {
+    return res.status(400).json({ error: 'Invalid finish reason' });
+  }
 
   if (!(await ensureParticipant(sessionId, req.user.id))) {
     return res.status(403).json({ error: 'Session access denied' });
   }
 
+  const [{ data: session, error: sessionError }, { data: players, error: playersError }] = await Promise.all([
+    supabase.from('game_sessions').select('status, state_data, created_at').eq('id', sessionId).maybeSingle(),
+    supabase.from('game_session_players').select('user_id, role').eq('session_id', sessionId)
+  ]);
+  if (sessionError || playersError) return sendDbError(res, sessionError || playersError);
+  if (!session) return res.status(404).json({ error: 'Session not found' });
+  if (CLOSED_STATUSES.includes(session.status)) return res.status(409).json({ error: 'Session is already closed' });
+
+  // Sonuç, sunucunun kurallara göre kabul ettiği son durumdan belirlenir. Sırası gelen
+  // oyuncu son hamlesini (ör. iflas ettiren kira) bitiş isteğiyle birlikte gönderebilir;
+  // o hamle de aynı kural denetiminden geçmelidir. Diğer oyuncunun gönderdiği durum yok sayılır.
+  const storedState = hasGameState(session.state_data) ? session.state_data : null;
+  const roleIndex = { host: 0, guest: 1 };
+  const requesterIndex = roleIndex[players?.find(p => p.user_id === req.user.id)?.role];
+  const turnOwner = storedState ? storedState.currentPlayer : 0;
+  let finalState = storedState;
+  if (reason !== 'forfeit' && requesterIndex === turnOwner && hasGameState(state_data) &&
+      validateStateTransition(storedState || initialState(players.length), state_data).ok) {
+    finalState = state_data;
+  }
+
+  // Hiç oynanmamış maç sonuç/istatistik üretmez (ör. eşleşip hemen bitirilen maçlarla XP toplama).
+  if (!finalState) return res.status(409).json({ error: 'Match has not started' });
+  if (reason === 'bankruptcy' && !finalState.players.some(p => Number(p?.money) <= 0)) {
+    return res.status(409).json({ error: 'No player is bankrupt' });
+  }
+  if (reason === 'time') {
+    const elapsedSeconds = (Date.now() - new Date(session.created_at).getTime()) / 1000;
+    if (!(elapsedSeconds >= GAME_DURATION_SECONDS - TIME_TOLERANCE_SECONDS)) {
+      return res.status(409).json({ error: 'Match time is not over yet' });
+    }
+  }
+
   const { data, error } = await supabase
     .from('game_sessions')
-    .update({ state_data, result_data, status: 'finished', updated_at: new Date().toISOString() })
+    .update({ state_data: finalState, result_data, status: 'finished', updated_at: new Date().toISOString() })
     .eq('id', sessionId)
     .in('status', ['waiting', 'active'])
     .select()
@@ -248,46 +252,34 @@ router.post('/sessions/:sessionId/finish', authenticate, validateObjectBody, asy
   if (!data) return res.status(409).json({ error: 'Session is already closed' });
 
   // Oturum yalnızca bir kez 'finished' olabildiği için istatistikler de bir kez işlenir.
-  const winnerIndex = getWinnerIndex(state_data);
-  const { data: players } = await supabase
-    .from('game_session_players')
-    .select('user_id, role')
-    .eq('session_id', sessionId);
+  const winnerIndex = getWinnerIndex(finalState);
   const winnerRole = winnerIndex === 0 ? 'host' : winnerIndex === 1 ? 'guest' : null;
   // Hükmen yenilgi: maçı terk eden oyuncu (isteği yapan) kaybeder; kazanan sunucuda belirlenir.
-  const winnerUserId = result_data.reason === 'forfeit'
+  const winnerUserId = reason === 'forfeit'
     ? players?.find(p => p.user_id !== req.user.id)?.user_id || null
     : players?.find(p => p.role === winnerRole)?.user_id || null;
   const { error: statsError } = await supabase.rpc('apply_session_result', {
     p_session_id: sessionId,
     p_winner_user_id: winnerUserId,
-    p_turns: Number.isInteger(state_data.turnCount) ? state_data.turnCount : 0
+    p_turns: Number.isInteger(finalState.turnCount) ? Math.min(Math.max(finalState.turnCount, 0), MAX_TURNS) : 0
   });
   if (statsError) console.error('[multiplayer/finish] stats update failed:', statsError.message);
 
   await broadcastSession(sessionId, {
     type: 'finished',
     user_id: req.user.id,
-    state_data,
+    state_data: finalState,
     result_data: { ...result_data, winner_user_id: winnerUserId }
   });
   res.json(data);
 });
 
-// SSE endpoint — tarayıcı EventSource custom header gönderemediği için
-// query string üzerinden token doğrulama yapılır
+// SSE endpoint — tarayıcı EventSource custom header gönderemediği için kısa ömürlü
+// akış bileti query string ile gelir (POST /api/auth/stream-ticket).
 router.get('/sessions/:sessionId/events', async (req, res) => {
   const { sessionId } = req.params;
-  const token = req.query.token;
-
-  if (!token) return res.status(401).end();
-
-  let user;
-  try {
-    user = jwt.verify(token, jwtSecret);
-  } catch {
-    return res.status(401).end();
-  }
+  const user = verifyStreamTicket(req.query.ticket, jwtSecret);
+  if (!user) return res.status(401).end();
 
   if (!(await ensureParticipant(sessionId, user.id))) {
     return res.status(403).end();

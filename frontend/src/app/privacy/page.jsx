@@ -83,7 +83,7 @@ const CONTENT = {
 };
 
 export default function PrivacyPage() {
-  const { stats, t, language } = useSession({ loadStats: false, loadGame: false });
+  const { stats, t, language } = useSession({ loadStats: false });
   const c = language === 'English' ? CONTENT.en : CONTENT.tr;
   return (
     <PageShell activePage="settings" stats={stats} t={t} language={language}>

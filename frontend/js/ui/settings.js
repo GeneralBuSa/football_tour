@@ -3,15 +3,12 @@
 // ==========================================
 
 import {
-  PLAYERS, currentPlayer, turnCount, gameLog, gameTime, timerId, gameEnded,
-  setPlayers, setCurrentPlayer, setTurnCount, setGameLog, setGameTime,
-  setTimerId, setTutorialText, setDiceRolled, setGameEnded
+  PLAYERS, gameTime, timerId, gameEnded,
+  setGameTime, setTimerId, setGameEnded
 } from '../engine/state.js';
-import { buildBoard } from '../engine/board.js';
-import { openCityModal, closeModal } from './modal.js';
-import { showNotif, updateTutorialHUD, renderPanel } from './panel.js';
+import { closeModal } from './modal.js';
+import { showNotif } from './panel.js';
 import { finishGame, renderPlayers } from '../engine/player.js';
-import { updateStadiums3D } from '../3d/stadiums.js';
 import gameService from '../../services/GameService.js';
 import { applyGameSnapshot, getGameSnapshot } from '../engine/snapshot.js';
 import multiplayerService from '../../services/MultiplayerService.js';
@@ -60,8 +57,6 @@ export async function initSteam() {
 // Oyun kaydetme
 export async function saveGame() {
   const saveData = getGameSnapshot();
-
-
   const result = await gameService.saveGame(saveData);
   showNotif(result.message);
 
@@ -88,9 +83,7 @@ export async function loadGame() {
 // Kayıt verisini uygula
 export function applySaveData(dataStr) {
   try {
-const data = JSON.parse(dataStr);
-    applyGameSnapshot(data);
-
+    applyGameSnapshot(JSON.parse(dataStr));
   } catch (e) {
     showNotif("Veri yüklenemedi!");
   }

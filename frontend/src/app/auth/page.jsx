@@ -5,12 +5,7 @@ import tr from '../../locales/tr.json';
 import en from '../../locales/en.json';
 import '../../../css/components/auth.css';
 import { trackEvent } from '../../../services/analytics.js';
-
-// Yalnızca site içi göreli yollara yönlendir (açık yönlendirme / open redirect koruması).
-function safeNextPath(value) {
-  if (typeof value !== 'string' || !value.startsWith('/') || value.startsWith('//') || value.startsWith('/auth')) return null;
-  return value;
-}
+import { safeNextPath } from '../shared/safeRedirect.js';
 
 const USERNAME_PATTERN = /^[A-Za-z0-9_]{3,24}$/;
 
@@ -45,13 +40,12 @@ export default function AuthPage() {
     setPasswordStrengthScore(score === 0 ? 1 : score);
   };
 
-  const [mounted, setMounted] = useState(false);
-
   const [nextPath, setNextPath] = useState(null);
 
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
-    const next = safeNextPath(params.get('next'));
+    // Yalnızca site içi göreli yollara yönlendir (açık yönlendirme / open redirect koruması).
+    const next = safeNextPath(params.get('next'), { excludePrefixes: ['/auth'] });
     setNextPath(next);
     if (apiService.isLoggedIn()) {
       // Giriş yapmış kullanıcı giriş sayfasına geri dönmesin (history'de yer açmadan).
@@ -69,8 +63,6 @@ export default function AuthPage() {
       setResetStep(2);
       setActiveTab('reset');
     }
-
-    setMounted(true);
   }, []);
 
   const t = language === 'English' ? en : tr;

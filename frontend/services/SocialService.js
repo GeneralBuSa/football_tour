@@ -56,11 +56,18 @@ export class SocialStream {
     };
   }
 
-  connect() {
+  async connect() {
     if (typeof EventSource === 'undefined') return;
-    const url = this._api.getMessageStreamUrl();
-    if (!url) return;
     this._active = true;
+    const url = await this._api.getMessageStreamUrl();
+    if (!this._active) return; // bu arada disconnect() çağrıldı
+    if (!url) {
+      // Çıkış yapılmışsa dur; bilet alınamadıysa (ağ hatası) tekrar dene.
+      if (this._api.isLoggedIn()) this._scheduleReconnect();
+      else this._active = false;
+      return;
+    }
+    if (this._source) this._source.close();
     this._source = new EventSource(url);
     this._source.onopen = () => { this._retry = 0; };
     this._source.onmessage = event => {
@@ -83,13 +90,18 @@ export class SocialStream {
       if (this._source) this._source.close();
       this._source = null;
       if (!this._active) return;
-      const delay = Math.min(1000 * 2 ** this._retry, 30000);
-      this._retry += 1;
-      clearTimeout(this._timer);
-      this._timer = setTimeout(() => {
-        if (this._active && this._api.isLoggedIn()) this.connect();
-      }, delay);
+      // Bilet tek bağlantılık ve kısa ömürlüdür: yeniden bağlanırken yenisi alınır.
+      this._scheduleReconnect();
     };
+  }
+
+  _scheduleReconnect() {
+    const delay = Math.min(1000 * 2 ** this._retry, 30000);
+    this._retry += 1;
+    clearTimeout(this._timer);
+    this._timer = setTimeout(() => {
+      if (this._active && this._api.isLoggedIn()) this.connect();
+    }, delay);
   }
 
   disconnect() {

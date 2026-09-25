@@ -15,7 +15,7 @@ export default function PageShell({ activePage, stats, t, children, language }) 
       <main className="page-shell-content">
         {children}
       </main>
-      <SiteFooter language={language} />
+      <SiteFooter language={language} clientNav />
     </div>
   );
 }

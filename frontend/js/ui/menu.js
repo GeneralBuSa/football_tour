@@ -9,16 +9,7 @@ import { startTimer, exitToMainMenu } from './settings.js';
 import apiService from '../../services/ApiService.js';
 import multiplayerService from '../../services/MultiplayerService.js';
 import { trackEvent } from '../../services/analytics.js';
-
-function escapeHtml(value) {
-  return String(value ?? '').replace(/[&<>"']/g, char => ({
-    '&': '&amp;',
-    '<': '&lt;',
-    '>': '&gt;',
-    '"': '&quot;',
-    "'": '&#39;'
-  }[char]));
-}
+import { escapeHtml } from '../utils/html.js';
 
 // Oyun başlatma — options.sessionId varsa multiplayer session başlatılır
 export function playLocalGame(options = {}) {
@@ -348,20 +339,6 @@ export function switchSocialTab(tabName, el) {
   }
 }
 
-export function toggleOfflineAccordion() {
-  const list = document.getElementById('offline-friends-list');
-  const arrow = document.getElementById('accordion-arrow');
-  if (!list) return;
-
-  if (list.classList.contains('open')) {
-    list.classList.remove('open');
-    if (arrow) arrow.textContent = '▶';
-  } else {
-    list.classList.add('open');
-    if (arrow) arrow.textContent = '▼';
-  }
-}
-
 function navigateWithTransition(href) {
   if (typeof window.triggerPageTransition === 'function') {
     window.triggerPageTransition(() => { window.location.href = href; });
@@ -370,13 +347,7 @@ function navigateWithTransition(href) {
   }
 }
 
-// Navigasyon fonksiyonları
 export function showHome() { navigateWithTransition('/'); }
-export function showProfile() { navigateWithTransition('/profile'); }
-export function showBattlePass() { navigateWithTransition('/battlepass'); }
-export function showStore() { navigateWithTransition('/store'); }
-export function showAchievements() { navigateWithTransition('/achievements'); }
-export function showMatchHistory() { navigateWithTransition('/history'); }
 
 // Özel oyun kur / katıl seçim ekranı
 export function showPrivateRoomSelection() {
@@ -401,13 +372,14 @@ export function showPrivateRoomSelection() {
 
         <div style="background: rgba(255,255,255,0.03); border: 1px solid rgba(255,255,255,0.05); padding: 15px; border-radius: 8px; text-align: center;">
           <div style="font-size: 14px; font-weight: bold; color: #fff; margin-bottom: 8px;">Oda Kur (Host)</div>
-          <p style="font-size: 11px; color: #aaa; margin-bottom: 12px;">Sizin oda kodunuz kendi kullanıcı adınız olacaktır.</p>
+          <p style="font-size: 11px; color: #aaa; margin-bottom: 12px;">Arkadaşın kullanıcı adınla birlikte odaya özel kodu girer ya da ona davet gönderirsin.</p>
           <button class="mbtn mbtn-buy" onclick="window.createPrivateRoomAction()" style="width: 100%; margin: 0; padding: 10px;">Oda Oluştur</button>
         </div>
 
         <form onsubmit="event.preventDefault(); window.joinPrivateRoomAction();" style="background: rgba(255,255,255,0.03); border: 1px solid rgba(255,255,255,0.05); padding: 15px; border-radius: 8px;">
           <label for="host-code-input" style="display: block; font-size: 14px; font-weight: bold; color: #fff; margin-bottom: 8px; text-align: center;">Odaya Katıl (Guest)</label>
-          <input type="text" id="host-code-input" autocomplete="off" maxlength="24" aria-describedby="host-code-error" placeholder="Arkadaşının Kullanıcı Adı (Oda Kodu)" class="search-input-field" style="width: 100%; box-sizing: border-box; background: rgba(0,0,0,0.3); border: 1px solid rgba(255,255,255,0.1); color: #fff; padding: 10px; border-radius: 6px; font-size: 13px; text-align: center; margin-bottom: 6px;" />
+          <input type="text" id="host-code-input" autocomplete="off" maxlength="24" aria-describedby="host-code-error" aria-label="Oda sahibinin kullanıcı adı" placeholder="Arkadaşının Kullanıcı Adı" class="search-input-field" style="width: 100%; box-sizing: border-box; background: rgba(0,0,0,0.3); border: 1px solid rgba(255,255,255,0.1); color: #fff; padding: 10px; border-radius: 6px; font-size: 13px; text-align: center; margin-bottom: 6px;" />
+          <input type="text" id="room-code-input" autocomplete="off" maxlength="6" aria-describedby="host-code-error" aria-label="Oda kodu" placeholder="Oda Kodu (6 karakter)" class="search-input-field" style="width: 100%; box-sizing: border-box; background: rgba(0,0,0,0.3); border: 1px solid rgba(255,255,255,0.1); color: #fff; padding: 10px; border-radius: 6px; font-size: 13px; text-align: center; text-transform: uppercase; letter-spacing: 3px; margin-bottom: 6px;" />
           <div id="host-code-error" role="alert" style="min-height: 16px; font-size: 11px; color: #ff7070; text-align: center; margin-bottom: 6px;"></div>
           <button type="submit" class="mbtn mbtn-upgrade" style="width: 100%; margin: 0; padding: 10px;">Odaya Bağlan</button>
         </form>
@@ -434,10 +406,12 @@ export async function createPrivateRoomAction() {
     title: '🎮 ÖZEL ODA KURULDU',
     subtitle: 'Arkadaşının Katılması Bekleniyor',
     body: `<div style="text-align: center; margin: 15px 0;">
-      <div style="font-size: 12px; color: #aaa;">Arkadaşınızın girmesi gereken Oda Kodu:</div>
-      <div style="font-size: 24px; font-weight: bold; color: #29b6f6; letter-spacing: 2px; margin: 10px 0; background: rgba(41, 182, 246, 0.1); padding: 10px; border-radius: 6px; border: 1px dashed #29b6f6; word-break: break-all;">
-        ${escapeHtml(myUsername)}
+      <div style="font-size: 12px; color: #aaa;">Arkadaşının gireceği bilgiler:</div>
+      <div style="font-size: 13px; color: #ddd; margin-top: 8px;">Kullanıcı adı: <strong style="color: #fff;">${escapeHtml(myUsername)}</strong></div>
+      <div id="private-room-code" aria-label="Oda kodu" style="font-size: 24px; font-weight: bold; color: #29b6f6; letter-spacing: 4px; margin: 10px 0; background: rgba(41, 182, 246, 0.1); padding: 10px; border-radius: 6px; border: 1px dashed #29b6f6; word-break: break-all;">
+        ······
       </div>
+      <div style="font-size: 11px; color: #aaa;">Ya da sohbetten arkadaşına davet gönder; davetle kodsuz katılır.</div>
     </div>`,
     status: 'Arkadaşınız bekleniyor...'
   });
@@ -454,6 +428,8 @@ export async function createPrivateRoomAction() {
     showLobbyError('Hata: ' + res.error);
     return false;
   }
+  const codeEl = document.getElementById('private-room-code');
+  if (codeEl && typeof res.room_code === 'string') codeEl.textContent = res.room_code;
   trackEvent('private_room_created');
 
   pollLobby({
@@ -469,22 +445,30 @@ export async function createPrivateRoomAction() {
 // Özel odaya katılma aksiyonu (Guest) — oda kodu formu
 export async function joinPrivateRoomAction() {
   const input = document.getElementById('host-code-input');
+  const codeInput = document.getElementById('room-code-input');
   const errorEl = document.getElementById('host-code-error');
   const hostUsername = input?.value.trim() || '';
-  if (!/^[A-Za-z0-9_]{3,24}$/.test(hostUsername)) {
-    if (errorEl) errorEl.textContent = 'Geçerli bir oda kodu girin (3-24 harf, rakam veya _).';
-    if (input) {
-      input.setAttribute('aria-invalid', 'true');
-      input.focus();
+  const roomCode = (codeInput?.value || '').trim().toUpperCase();
+  const invalid = (field, message) => {
+    if (errorEl) errorEl.textContent = message;
+    if (field) {
+      field.setAttribute('aria-invalid', 'true');
+      field.focus();
     }
     return false;
+  };
+  if (!/^[A-Za-z0-9_]{3,24}$/.test(hostUsername)) {
+    return invalid(input, 'Geçerli bir kullanıcı adı girin (3-24 harf, rakam veya _).');
+  }
+  if (!/^[A-Z0-9]{6}$/.test(roomCode)) {
+    return invalid(codeInput, 'Oda sahibinin paylaştığı 6 karakterlik kodu girin.');
   }
   closeModal('private-room-modal');
-  return joinPrivateRoomByHost(hostUsername);
+  return joinPrivateRoomByHost(hostUsername, roomCode);
 }
 
-// Oda koduyla veya arkadaş davetinden özel odaya bağlanır.
-export async function joinPrivateRoomByHost(hostUsername) {
+// Oda koduyla veya arkadaş davetinden (kodsuz) özel odaya bağlanır.
+export async function joinPrivateRoomByHost(hostUsername, roomCode = null) {
   if (!apiService.isLoggedIn()) {
     window.location.href = '/auth';
     return false;
@@ -502,7 +486,7 @@ export async function joinPrivateRoomByHost(hostUsername) {
     await apiService.leaveLobby();
   };
 
-  const res = await apiService.joinPrivateLobby(hostUsername);
+  const res = await apiService.joinPrivateLobby(hostUsername, roomCode);
   if (res.error) {
     showLobbyError('Bağlanılamadı: ' + res.error);
     return false;

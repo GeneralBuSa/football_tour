@@ -13,16 +13,6 @@
   overflow: hidden;
 }
 
-.auth-video-bg {
-  position: fixed;
-  top: 0;
-  left: 0;
-  width: 100vw;
-  height: 100vh;
-  object-fit: cover;
-  z-index: 1;
-}
-
 .auth-overlay {
   position: fixed;
   top: 0;
@@ -59,16 +49,6 @@
 
 .auth-logo {
   margin-bottom: 30px;
-}
-
-.auth-logo .logo-main {
-  font-size: 42px;
-  font-weight: 800;
-  background: linear-gradient(135deg, #29b6f6, #ff7043);
-  background-clip: text;
-  -webkit-background-clip: text;
-  -webkit-text-fill-color: transparent;
-  text-shadow: 0 0 20px rgba(41, 182, 246, 0.4);
 }
 
 .auth-tabs {

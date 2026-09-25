@@ -5,7 +5,7 @@ import PageShell from '../shared/PageShell.jsx';
 import EmptyState from '../shared/EmptyState.jsx';
 
 export default function BattlePassPage() {
-  const { isLoggedIn, user, stats, language, mounted, gameReady, t } = useSession({ loadGame: false });
+  const { isLoggedIn, stats, language, gameReady, t } = useSession();
   const [loading, setLoading] = useState(true);
 
   // Battle Pass ödül tanımları (10 Seviye)
@@ -47,7 +47,7 @@ export default function BattlePassPage() {
   const progressPercent = xpNeededForNext > 0 ? Math.min(100, (xpInCurrentLevel / xpNeededForNext) * 100) : 100;
 
   return (
-    <PageShell activePage="battlepass" stats={stats} t={t} mounted={mounted}>
+    <PageShell activePage="battlepass" stats={stats} t={t} language={language}>
       <div className="menu-dynamic-screen">
         <div className="dynamic-screen-header" style={{position: 'relative', display: 'flex', justifyContent: 'center', alignItems: 'center'}}>
           <button className="btn-mode-back" onClick={() => {window.location.href='/'}} style={{position: 'absolute', left: '0', margin: '0', padding: '6px 12px', fontSize: '12px'}}>← {t.back}</button>

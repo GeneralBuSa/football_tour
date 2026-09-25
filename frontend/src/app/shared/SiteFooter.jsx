@@ -1,4 +1,5 @@
 // Herkese açık sayfalar arası iç bağlantılar ve (tanımlıysa) iletişim adresi.
+import Link from 'next/link';
 import { CONTACT_EMAIL } from './siteConfig.js';
 
 const LINKS = {
@@ -18,12 +19,16 @@ const LINKS = {
   ]
 };
 
-export default function SiteFooter({ language = 'Türkçe', compact = false, className = '' }) {
+// clientNav: alt sayfalarda iç bağlantılar istemci tarafında açılır. Ana sayfa (oyun
+// motorunu kurar) ve oraya dönüş her zaman tam sayfa yüklemesiyle yapılır.
+export default function SiteFooter({ language = 'Türkçe', compact = false, className = '', clientNav = false }) {
   const links = language === 'English' ? LINKS.en : LINKS.tr;
   return (
     <footer className={`site-footer ${compact ? 'compact' : ''} ${className}`}>
       <nav aria-label={language === 'English' ? 'Site links' : 'Site bağlantıları'}>
-        {links.map(([href, label]) => <a key={href} href={href}>{label}</a>)}
+        {links.map(([href, label]) => (clientNav && href !== '/'
+          ? <Link key={href} href={href}>{label}</Link>
+          : <a key={href} href={href}>{label}</a>))}
         {!compact && CONTACT_EMAIL && <a href={`mailto:${CONTACT_EMAIL}`}>{CONTACT_EMAIL}</a>}
       </nav>
     </footer>

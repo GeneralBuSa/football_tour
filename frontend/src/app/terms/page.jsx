@@ -12,7 +12,7 @@ const CONTENT = {
     sections: [
       ['Hesap', [
         'Çevrimiçi özellikleri kullanmak için bir hesap oluşturman gerekir. Hesap bilgilerinin güvenliğinden sen sorumlusun.',
-        'Kullanıcı adları 3-24 karakterdir ve diğer oyuncular tarafından görülür; özel oda kodu olarak da kullanılır.',
+        'Kullanıcı adları 3-24 karakterdir ve diğer oyuncular tarafından görülür.',
         'Hesabını dilediğin zaman Ayarlar sayfasından silebilirsin.'
       ]],
       ['Kabul edilebilir kullanım', [
@@ -39,7 +39,7 @@ const CONTENT = {
     sections: [
       ['Account', [
         'Online features require an account. You are responsible for keeping your credentials safe.',
-        'Usernames are 3-24 characters, visible to other players and also used as your private room code.',
+        'Usernames are 3-24 characters and visible to other players.',
         'You can delete your account at any time from the Settings page.'
       ]],
       ['Acceptable use', [
@@ -63,7 +63,7 @@ const CONTENT = {
 };
 
 export default function TermsPage() {
-  const { stats, t, language } = useSession({ loadStats: false, loadGame: false });
+  const { stats, t, language } = useSession({ loadStats: false });
   const c = language === 'English' ? CONTENT.en : CONTENT.tr;
   return (
     <PageShell activePage="settings" stats={stats} t={t} language={language}>

@@ -13,6 +13,8 @@ CREATE TABLE IF NOT EXISTS public.users (
 );
 
 CREATE UNIQUE INDEX IF NOT EXISTS users_email_lower_idx ON public.users (lower(email));
+-- Şifre sıfırlanınca artırılır; eski oturum token'ları (farklı sürüm taşıyan) geçersiz olur.
+ALTER TABLE public.users ADD COLUMN IF NOT EXISTS token_version integer NOT NULL DEFAULT 0;
 
 CREATE TABLE IF NOT EXISTS public.stats (
   user_id uuid PRIMARY KEY REFERENCES public.users(id) ON DELETE CASCADE,
@@ -215,6 +217,8 @@ CREATE TABLE IF NOT EXISTS public.lobby_queue (
 );
 
 ALTER TABLE public.lobby_queue ADD COLUMN IF NOT EXISTS last_seen timestamptz NOT NULL DEFAULT now();
+-- Özel oda kodu: yalnızca kodu bilen (ya da oda sahibinden davet almış) oyuncu katılabilir.
+ALTER TABLE public.lobby_queue ADD COLUMN IF NOT EXISTS room_code text;
 CREATE INDEX IF NOT EXISTS lobby_queue_searching_idx ON public.lobby_queue (status, created_at);
 
 CREATE TABLE IF NOT EXISTS public.game_saves (
@@ -578,7 +582,12 @@ BEGIN
 END;
 $$;
 
-CREATE OR REPLACE FUNCTION public.join_private_session(p_user_id uuid, p_host_username text)
+-- Eski imza (yalnızca kullanıcı adıyla katılım) kaldırılır.
+DROP FUNCTION IF EXISTS public.join_private_session(uuid, text);
+
+-- Özel odaya katılım: oda kodu doğru olmalı ya da katılan oyuncu, oda kurulduktan sonra
+-- oda sahibinden bir oyun daveti almış olmalıdır. Kullanıcı adını bilmek tek başına yetmez.
+CREATE OR REPLACE FUNCTION public.join_private_session(p_user_id uuid, p_host_username text, p_room_code text DEFAULT NULL)
 RETURNS TABLE (status text, matched_username text, avatar text, session_id uuid)
 LANGUAGE plpgsql
 SECURITY DEFINER
@@ -590,6 +599,8 @@ DECLARE
   v_host_username text;
   v_host_avatar text;
   v_session_id uuid;
+  v_room_code text;
+  v_room_created timestamptz;
 BEGIN
   IF p_user_id IS NULL OR p_host_username IS NULL OR length(trim(p_host_username)) = 0 THEN
     RAISE EXCEPTION 'INVALID_ARGUMENT';
@@ -601,13 +612,24 @@ BEGIN
   IF NOT FOUND THEN RAISE EXCEPTION 'HOST_NOT_FOUND'; END IF;
   IF v_host_id = p_user_id THEN RAISE EXCEPTION 'CANNOT_JOIN_OWN_ROOM'; END IF;
 
-  SELECT l.session_id INTO v_session_id
+  SELECT l.session_id, l.room_code, l.created_at INTO v_session_id, v_room_code, v_room_created
   FROM public.lobby_queue l
   WHERE l.user_id = v_host_id
     AND l.status = 'waiting_private'
     AND l.last_seen > now() - public.matchmaking_stale_after()
   FOR UPDATE;
   IF NOT FOUND THEN RAISE EXCEPTION 'PRIVATE_ROOM_UNAVAILABLE'; END IF;
+
+  IF NOT (
+    (v_room_code IS NOT NULL AND p_room_code IS NOT NULL AND upper(trim(p_room_code)) = v_room_code)
+    OR EXISTS (
+      SELECT 1 FROM public.direct_messages m
+      WHERE m.sender_id = v_host_id AND m.recipient_id = p_user_id
+        AND m.kind = 'game_invite' AND m.created_at >= v_room_created
+    )
+  ) THEN
+    RAISE EXCEPTION 'ROOM_CODE_INVALID';
+  END IF;
 
   IF v_session_id IS NULL THEN
     INSERT INTO public.game_sessions (host_user_id, status, mode)
@@ -629,6 +651,21 @@ BEGIN
 
   RETURN QUERY SELECT 'matched'::text, v_host_username, v_host_avatar, v_session_id;
 END;
+$$;
+
+-- Özel oda açar/yeniler. Zamanlar veritabanı saatiyle yazılır; davet kontrolü
+-- (join_private_session) mesaj zamanıyla aynı saate göre karşılaştırma yapar.
+CREATE OR REPLACE FUNCTION public.open_private_room(p_user_id uuid, p_room_code text)
+RETURNS void
+LANGUAGE sql
+SECURITY DEFINER
+SET search_path = public
+AS $$
+  INSERT INTO public.lobby_queue (user_id, status, room_code, matched_with, session_id, created_at, last_seen)
+  VALUES (p_user_id, 'waiting_private', p_room_code, NULL, NULL, now(), now())
+  ON CONFLICT (user_id) DO UPDATE
+    SET status = 'waiting_private', room_code = EXCLUDED.room_code, matched_with = NULL,
+        session_id = NULL, created_at = now(), last_seen = now();
 $$;
 
 -- Çevrimiçi maç bitince iki oyuncunun kalıcı istatistiklerini günceller.
@@ -656,13 +693,15 @@ REVOKE ALL ON FUNCTION public.try_match_player(uuid) FROM PUBLIC, anon, authenti
 REVOKE ALL ON FUNCTION public.matchmake_player(uuid) FROM PUBLIC, anon, authenticated;
 REVOKE ALL ON FUNCTION public.poll_matchmaking(uuid) FROM PUBLIC, anon, authenticated;
 REVOKE ALL ON FUNCTION public.leave_matchmaking(uuid) FROM PUBLIC, anon, authenticated;
-REVOKE ALL ON FUNCTION public.join_private_session(uuid, text) FROM PUBLIC, anon, authenticated;
+REVOKE ALL ON FUNCTION public.join_private_session(uuid, text, text) FROM PUBLIC, anon, authenticated;
+REVOKE ALL ON FUNCTION public.open_private_room(uuid, text) FROM PUBLIC, anon, authenticated;
 REVOKE ALL ON FUNCTION public.apply_session_result(uuid, uuid, integer) FROM PUBLIC, anon, authenticated;
 GRANT EXECUTE ON FUNCTION public.try_match_player(uuid) TO service_role;
 GRANT EXECUTE ON FUNCTION public.matchmake_player(uuid) TO service_role;
 GRANT EXECUTE ON FUNCTION public.poll_matchmaking(uuid) TO service_role;
 GRANT EXECUTE ON FUNCTION public.leave_matchmaking(uuid) TO service_role;
-GRANT EXECUTE ON FUNCTION public.join_private_session(uuid, text) TO service_role;
+GRANT EXECUTE ON FUNCTION public.join_private_session(uuid, text, text) TO service_role;
+GRANT EXECUTE ON FUNCTION public.open_private_room(uuid, text) TO service_role;
 GRANT EXECUTE ON FUNCTION public.apply_session_result(uuid, uuid, integer) TO service_role;
 
 -- ---------------------------------------------------------------------------

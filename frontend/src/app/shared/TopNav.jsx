@@ -3,6 +3,14 @@
 // stats: kullanıcı bakiye bilgisi
 // t: çeviri objesi
 'use client';
+import Link from 'next/link';
+
+// Alt sayfalar arası geçiş istemci tarafında yapılır (tam sayfa yenilemesi yok, Link
+// görünür olunca hedef sayfayı önceden indirir). Ana sayfa ise oyun motorunu ve 3D
+// sahneyi her açılışta sıfırdan kurduğu için oraya giden bağlantılar düz <a> kalır.
+function NavLink({ href, ...props }) {
+  return href === '/' ? <a href={href} {...props} /> : <Link href={href} {...props} />;
+}
 
 const NAV_ITEMS_LEFT = [
   { key: 'home', icon: '🏠', href: '/', titleKey: 'nav_home' },
@@ -27,7 +35,7 @@ export default function TopNav({ activePage = '', stats = {}, t = {} }) {
       <div className="top-nav-center">
         <div className="nav-icons-group left">
           {NAV_ITEMS_LEFT.map(item => (
-            <a
+            <NavLink
               key={item.key}
               href={item.href}
               className={`nav-item-icon${activePage === item.key ? ' active' : ''}`}
@@ -37,7 +45,7 @@ export default function TopNav({ activePage = '', stats = {}, t = {} }) {
               style={{ textDecoration: 'none' }}
             >
               {item.icon}
-            </a>
+            </NavLink>
           ))}
         </div>
         <a className="btn-play-tactical" href="/?play=true" style={{ textDecoration: 'none' }}>
@@ -45,7 +53,7 @@ export default function TopNav({ activePage = '', stats = {}, t = {} }) {
         </a>
         <div className="nav-icons-group right">
           {NAV_ITEMS_RIGHT.map(item => (
-            <a
+            <NavLink
               key={item.key}
               href={item.href}
               className={`nav-item-icon${activePage === item.key ? ' active' : ''}`}
@@ -55,7 +63,7 @@ export default function TopNav({ activePage = '', stats = {}, t = {} }) {
               style={{ textDecoration: 'none' }}
             >
               {item.icon}
-            </a>
+            </NavLink>
           ))}
         </div>
       </div>

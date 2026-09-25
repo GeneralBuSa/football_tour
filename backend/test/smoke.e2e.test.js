@@ -3,7 +3,7 @@
 // bu senaryo kırılırsa ana kullanıcı yolculuğu bozulmuş demektir.
 import test, { after, before } from 'node:test';
 import assert from 'node:assert/strict';
-import { startTestServer } from './support/testEnv.js';
+import { ageSession, onlineState, startTestServer } from './support/testEnv.js';
 
 let env;
 before(async () => { env = await startTestServer(); });
@@ -23,7 +23,7 @@ test('full player journey: register → friends → chat → invite → live mat
   assert.equal((await api('POST', '/friends/accept', { token: guest.token, body: { friend_id: host.id } })).status, 200);
 
   // Canlı bildirim akışları
-  const guestInbox = env.openStream(`/messages/stream?token=${guest.token}`);
+  const guestInbox = env.openStream(`/messages/stream`, guest.token);
   await guestInbox.ready;
   await guestInbox.next(e => e.type === 'connected');
 
@@ -44,17 +44,24 @@ test('full player journey: register → friends → chat → invite → live mat
   assert.equal(hostStatus.body.session_id, sessionId);
 
   // Canlı oyun
-  const hostEvents = env.openStream(`/multiplayer/sessions/${sessionId}/events?token=${host.token}`);
-  const guestEvents = env.openStream(`/multiplayer/sessions/${sessionId}/events?token=${guest.token}`);
+  const hostEvents = env.openStream(`/multiplayer/sessions/${sessionId}/events`, host.token);
+  const guestEvents = env.openStream(`/multiplayer/sessions/${sessionId}/events`, guest.token);
   await Promise.all([hostEvents.ready, guestEvents.ready]);
 
-  const players = [{ name: host.username, money: 1_000_000 }, { name: guest.username, money: 1_000_000 }];
+  const names = [host.username, guest.username];
   let version = null;
   let turn = 0;
   const tokens = [host.token, guest.token];
+  // Guest ilk turunda Samsun'u (₺70K) alır; böylece maç sonunda host daha zengindir.
+  const money = [1_000_000, 1_000_000];
+  const owned = [[], []];
   for (let move = 0; move < 4; move++) {
     const nextPlayer = (turn + 1) % 2;
-    const state = { players, currentPlayer: nextPlayer, turnCount: 1 + Math.floor((move + 1) / 2) };
+    if (move === 1) {
+      money[1] -= 70_000;
+      owned[1] = [1];
+    }
+    const state = onlineState({ names, money, owned, currentPlayer: nextPlayer, turnCount: 1 + Math.floor((move + 1) / 2) });
     const res = await api('PUT', `/multiplayer/sessions/${sessionId}/state`, {
       token: tokens[turn], body: { state_data: state, event_type: 'end_turn', version }
     });
@@ -66,9 +73,10 @@ test('full player journey: register → friends → chat → invite → live mat
     turn = nextPlayer;
   }
 
-  const finalState = { players: [{ ...players[0], money: 1_500_000 }, { ...players[1], money: 200_000 }], currentPlayer: 0, turnCount: 3 };
+  await ageSession(env.db, sessionId);
+  const finalState = onlineState({ names, money, owned, currentPlayer: 0, turnCount: 3 });
   const finish = await api('POST', `/multiplayer/sessions/${sessionId}/finish`, {
-    token: host.token, body: { state_data: finalState, result_data: { reason: 'completed' } }
+    token: host.token, body: { state_data: finalState, result_data: { reason: 'time' } }
   });
   assert.equal(finish.status, 200);
   await guestEvents.next(e => e.type === 'finished');

@@ -127,11 +127,6 @@ export function initThreeJS() {
   animate3D();
 }
 
-// Oyun ekranı görünür olduğunda veya düzen değiştiğinde çağrılır.
-export function update3DCamera() {
-  refreshView();
-}
-
 let lastRenderTime = 0;
 
 // Animasyon döngüsü

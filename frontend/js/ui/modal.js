@@ -4,7 +4,6 @@
 
 import { CITIES } from '../data/cities.js';
 import { PLAYERS, currentPlayer } from '../engine/state.js';
-import gameService from '../../services/GameService.js';
 import { escapeHtml } from '../utils/html.js';
 
 // Modal kapatma
@@ -66,53 +65,5 @@ export function openCityModal(cIdx, canBuy = false) {
         <button class="mbtn mbtn-pass" onclick="window.closeModal('city-modal')">Kapat</button>
       </div>
     </div>`;
-  document.body.appendChild(div);
-}
-
-// Başarım modalı
-export function showAchievementsModal() {
-  const achievements = gameService.achievement.getAll();
-
-  closeModal('achievements-modal');
-
-  const div = document.createElement('div');
-  div.className = 'modal-backdrop';
-  div.id = 'achievements-modal';
-
-  const cardsHtml = achievements.map(ach => {
-    let unlockedDateStr = '';
-    if (ach.unlocked && ach.unlockedAt) {
-      const date = new Date(ach.unlockedAt);
-      unlockedDateStr = `<div class="ach-date">Açılış: ${date.toLocaleDateString('tr-TR')} ${date.toLocaleTimeString('tr-TR', {hour: '2-digit', minute:'2-digit'})}</div>`;
-    }
-
-    return `
-      <div class="achievement-card ${ach.unlocked ? 'unlocked' : ''}">
-        <div class="ach-icon-box">${ach.icon}</div>
-        <div class="ach-details">
-          <div class="ach-name">${ach.name}</div>
-          <div class="ach-desc">${ach.desc}</div>
-          ${unlockedDateStr}
-        </div>
-      </div>
-    `;
-  }).join('');
-
-  div.innerHTML = `
-    <div class="modal" style="width: 360px;">
-      <div class="modal-head">
-        <div class="modal-city">🏆 BAŞARIMLAR</div>
-        <div class="modal-league">Kulüp Başarıları ve Kupalar</div>
-      </div>
-      <div class="modal-body">
-        <div class="achievements-modal-body">
-          ${cardsHtml}
-        </div>
-      </div>
-      <div class="modal-btns">
-        <button class="mbtn mbtn-pass" onclick="window.closeModal('achievements-modal')" style="width: 100%">Kapat</button>
-      </div>
-    </div>
-  `;
   document.body.appendChild(div);
 }

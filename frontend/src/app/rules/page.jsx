@@ -16,7 +16,7 @@ const CONTENT = {
     faqTitle: 'Sık Sorulan Sorular',
     faq: [
       ['Oynamak için hesap gerekiyor mu?', 'Aynı cihazda iki kişilik “Yerel Maç” hesap gerektirmez. Çevrimiçi eşleşme, özel oda, arkadaş listesi ve mesajlaşma için ücretsiz bir hesap gerekir.'],
-      ['Arkadaşımla çevrimiçi nasıl oynarım?', 'OYNA → Özel Oda → “Oda Oluştur” de; oda kodun kullanıcı adındır. Arkadaşın “Odaya Katıl” alanına kullanıcı adını yazar. Arkadaş listende “Davet Et” butonu da odayı kurup davet gönderir.'],
+      ['Arkadaşımla çevrimiçi nasıl oynarım?', 'OYNA → Özel Oda → “Oda Oluştur” de; ekranda 6 karakterlik bir oda kodu görünür. Arkadaşın “Odaya Katıl” alanına kullanıcı adını ve bu kodu yazar. Arkadaş listende “Davet Et” butonu da odayı kurup davet gönderir; davetle gelen arkadaşın kod girmez.'],
       ['Hızlı eşleşme nasıl çalışır?', 'Sıraya giren iki oyuncu otomatik eşleşir. Sırada en uzun bekleyen oyuncu maçı başlatır. Eşleşmeden önce sayfayı kapatan oyuncular kısa süre içinde sıradan düşer.'],
       ['Bağlantım koparsa ne olur?', 'Çevrimiçi maçta hamleler sunucuda saklanır. Kısa kopmalarda oyun otomatik olarak yeniden bağlanır ve son durumu yükler.'],
       ['Coin nedir, nasıl kullanılır?', 'Yeni hesaplar 2.000 coin ile başlar. Coin; mağazadaki futbolcu karakterleri ve kozmetikler için kullanılır. İstersen coin paketlerini Stripe güvenli ödeme sayfası üzerinden satın alabilirsin.'],
@@ -36,7 +36,7 @@ const CONTENT = {
     faqTitle: 'Frequently Asked Questions',
     faq: [
       ['Do I need an account to play?', 'The two-player “Local Match” on one device needs no account. Online matchmaking, private rooms, friends and chat require a free account.'],
-      ['How do I play online with a friend?', 'PLAY → Private Room → “Create Room”; your room code is your username. Your friend enters it under “Join Room”. The “Invite” button in your friends list also creates a room and sends an invite.'],
+      ['How do I play online with a friend?', 'PLAY → Private Room → “Create Room”; a 6-character room code appears on screen. Your friend enters your username and this code under “Join Room”. The “Invite” button in your friends list also creates a room and sends an invite; an invited friend does not need the code.'],
       ['How does quick match work?', 'Two players in the queue are matched automatically. The player who waited longest starts the match. Players who close the page before a match drop out of the queue shortly after.'],
       ['What happens if my connection drops?', 'Online moves are stored on the server. After a short disconnect the game reconnects automatically and loads the latest state.'],
       ['What are coins for?', 'New accounts start with 2,000 coins. Coins unlock player characters and cosmetics in the store. Optionally, coin packs can be purchased through Stripe\'s secure checkout.'],
@@ -47,7 +47,7 @@ const CONTENT = {
 };
 
 export default function RulesPage() {
-  const { stats, t, language } = useSession({ loadStats: false, loadGame: false });
+  const { stats, t, language } = useSession({ loadStats: false });
   const c = language === 'English' ? CONTENT.en : CONTENT.tr;
   // FAQ yapılandırılmış verisi her zaman varsayılan dil (Türkçe) içerikle üretilir.
   const faqSchema = {
