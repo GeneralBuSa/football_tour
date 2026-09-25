@@ -2,9 +2,10 @@
 import { useEffect, useState } from 'react';
 import useSession from '../shared/useSession.js';
 import PageShell from '../shared/PageShell.jsx';
+import EmptyState from '../shared/EmptyState.jsx';
 
 export default function BattlePassPage() {
-  const { isLoggedIn, user, stats, language, mounted, gameReady, t } = useSession();
+  const { isLoggedIn, user, stats, language, mounted, gameReady, t } = useSession({ loadGame: false });
   const [loading, setLoading] = useState(true);
 
   // Battle Pass ödül tanımları (10 Seviye)
@@ -57,7 +58,7 @@ export default function BattlePassPage() {
           {loading ? (
             <div style={{color: '#fff', textAlign: 'center', padding: '40px'}}>{t.loading}</div>
           ) : !isLoggedIn ? (
-            <div style={{color: '#aaa', textAlign: 'center', padding: '40px'}}>{t.bp_login_required}</div>
+            <EmptyState icon="🔒" message={t.bp_login_required} actionLabel={t.login_btn || 'Giriş Yap'} actionHref="/auth?next=/battlepass" />
           ) : (
             <div style={{display: 'flex', flexDirection: 'column', gap: '24px'}}>
               {/* Seviye İlerleme Kartı */}

@@ -3067,3 +3067,1019 @@ input[type="range"]::-moz-range-progress {
   height: 100%;
   border-radius: 3px;
 }
+
+/* ==========================================
+   KATMAN SIRASI DÜZELTMESİ
+   Ana menü (z-index: 999) sabit konumlu olduğundan body'ye eklenen modallar
+   (lobi, özel oda, şehir) ve bildirimler menünün arkasında kalıyordu.
+   ========================================== */
+.modal-backdrop {
+  z-index: 1100;
+  padding: 16px;
+  box-sizing: border-box;
+}
+
+.modal {
+  max-width: 100%;
+  max-height: calc(100dvh - 32px);
+  overflow-y: auto;
+}
+
+.notification {
+  z-index: 1200;
+  max-width: calc(100vw - 32px);
+  text-align: center;
+}
+
+.loot-overlay {
+  z-index: 1150;
+}
+
+/* ==========================================
+   ERİŞİLEBİLİRLİK: klavye odağı ve buton sıfırlamaları
+   ========================================== */
+.sr-only {
+  white-space: nowrap;
+  border: 0;
+  padding: 0;
+  margin: -1px;
+}
+
+:where(button, a, input, select, textarea, [tabindex]):focus-visible {
+  outline: 2px solid #00e5ff;
+  outline-offset: 2px;
+}
+
+button.nav-item-icon,
+button.social-tab,
+button.social-toggle-btn,
+button.mode-card,
+button.icon-button,
+button.lobby-player-row {
+  font: inherit;
+  color: inherit;
+  -webkit-appearance: none;
+  appearance: none;
+}
+
+button.nav-item-icon {
+  background: transparent;
+  border: none;
+  padding: 0;
+  font-size: 18px;
+}
+
+button.social-tab {
+  position: relative;
+  color: #a0aec0;
+}
+
+button.mode-card {
+  text-align: left;
+  padding: 0;
+  color: #ffffff;
+}
+
+.mode-title {
+  display: block;
+}
+
+button.lobby-player-row {
+  background: transparent;
+  border: 1px dashed rgba(255, 255, 255, 0.08);
+}
+
+.disabled,
+button:disabled {
+  cursor: not-allowed;
+  opacity: 0.6;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+}
+
+/* ==========================================
+   SOSYAL PANEL: istekler, rozetler, geri bildirim
+   ========================================== */
+.social-badge {
+  position: absolute;
+  top: -4px;
+  right: -4px;
+  min-width: 16px;
+  height: 16px;
+  padding: 0 4px;
+  border-radius: 8px;
+  background: #ff5252;
+  color: #fff;
+  font-size: 10px;
+  font-weight: 800;
+  line-height: 16px;
+  text-align: center;
+  box-sizing: border-box;
+}
+
+.friend-feedback {
+  min-height: 14px;
+  font-size: 11px;
+  margin: -6px 0 6px;
+  color: #94a3b8;
+}
+
+.friend-feedback.error {
+  color: #ff8a80;
+}
+
+.friend-feedback.success {
+  color: #69f0ae;
+}
+
+.friend-section-title {
+  font-size: 11px;
+  font-weight: 800;
+  color: #94a3b8;
+  padding: 4px 2px 0;
+  letter-spacing: 0.5px;
+}
+
+.friend-section-title.incoming {
+  color: #ff7043;
+}
+
+.friend-section-title.accepted {
+  color: #2ecc71;
+}
+
+.friend-section-empty {
+  font-size: 12px;
+  color: #ff8a80;
+  padding: 6px 2px;
+}
+
+.friend-row {
+  cursor: default;
+}
+
+.friend-info {
+  min-width: 0;
+}
+
+.friend-name {
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.friend-actions {
+  display: flex;
+  gap: 6px;
+  align-items: center;
+  margin-left: auto;
+  flex-shrink: 0;
+}
+
+.icon-button {
+  position: relative;
+  min-width: 28px;
+  min-height: 28px;
+  padding: 2px 4px;
+  border-radius: 6px;
+  border: none;
+  background: rgba(255, 255, 255, 0.06);
+  cursor: pointer;
+  font-size: 13px;
+}
+
+.icon-button.danger {
+  color: #ff5252;
+}
+
+.icon-button:hover:not(:disabled) {
+  background: rgba(255, 255, 255, 0.12);
+}
+
+.link-button {
+  background: none;
+  border: none;
+  padding: 0;
+  color: #29b6f6;
+  text-decoration: underline;
+  cursor: pointer;
+  font: inherit;
+}
+
+.skeleton-row {
+  height: 40px;
+  margin-bottom: 8px;
+  background: linear-gradient(90deg, rgba(255, 255, 255, 0.03) 25%, rgba(255, 255, 255, 0.08) 50%, rgba(255, 255, 255, 0.03) 75%);
+  background-size: 200% 100%;
+  animation: ft26-skeleton 1.2s ease-in-out infinite;
+}
+
+@keyframes ft26-skeleton {
+  from { background-position: 200% 0; }
+  to { background-position: -200% 0; }
+}
+
+.invite-toasts {
+  position: absolute;
+  top: 72px;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 20;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  width: min(420px, calc(100vw - 32px));
+}
+
+.invite-toast {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  flex-wrap: wrap;
+  padding: 10px 12px;
+  border-radius: 10px;
+  background: rgba(11, 15, 25, 0.95);
+  border: 1px solid rgba(46, 204, 113, 0.4);
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.45);
+  font-size: 13px;
+}
+
+.invite-toast-actions {
+  display: flex;
+  gap: 6px;
+}
+
+/* Mobil sabit OYNA butonu yalnızca küçük ekranlarda görünür */
+.mobile-play-cta {
+  display: none;
+}
+
+/* ==========================================
+   RESPONSIVE KIRILIMLAR
+   ========================================== */
+
+/* Tablet: 769px – 1180px */
+@media (max-width: 1180px) {
+  .menu-top-nav {
+    padding: 0 16px;
+  }
+
+  .nav-icons-group {
+    gap: 10px;
+  }
+
+  .nav-icons-group.left {
+    padding: 0 30px 0 24px;
+  }
+
+  .nav-icons-group.right {
+    padding: 0 24px 0 30px;
+  }
+
+  .btn-play-tactical {
+    padding: 0 40px;
+  }
+
+  .menu-right-social {
+    right: 16px;
+    width: 250px;
+  }
+
+  .game-mode-container {
+    left: 16px;
+    right: 290px;
+  }
+
+  .board-3d-container {
+    transform: rotateX(54deg) rotateZ(-45deg) scale(0.66);
+  }
+
+  .hud-player-card {
+    width: 170px;
+  }
+}
+
+/* Mobil: ≤ 768px */
+@media (max-width: 768px) {
+  .main-menu-container {
+    overflow-y: auto;
+    overflow-x: hidden;
+    -webkit-overflow-scrolling: touch;
+    padding-bottom: calc(84px + env(safe-area-inset-bottom));
+    box-sizing: border-box;
+  }
+
+  .menu-video-bg,
+  .menu-overlay {
+    position: fixed;
+  }
+
+  .menu-top-nav {
+    position: relative;
+    flex-wrap: wrap;
+    height: auto;
+    row-gap: 8px;
+    padding: 8px 16px;
+    padding-top: calc(8px + env(safe-area-inset-top));
+  }
+
+  .logo-img {
+    height: 44px;
+  }
+
+  .top-nav-center {
+    order: 3;
+    width: 100%;
+    justify-content: center;
+    height: auto;
+  }
+
+  #main-menu .top-nav-center > .btn-play-tactical {
+    display: none;
+  }
+
+  .nav-icons-group,
+  .nav-icons-group.left,
+  .nav-icons-group.right {
+    clip-path: none;
+    padding: 0 6px;
+    gap: 4px;
+    height: 44px;
+    border-radius: 8px;
+  }
+
+  .nav-icons-group.left {
+    border-radius: 8px 0 0 8px;
+  }
+
+  .nav-icons-group.right {
+    border-radius: 0 8px 8px 0;
+  }
+
+  .nav-item-icon,
+  button.nav-item-icon {
+    width: 42px;
+    height: 44px;
+  }
+
+  .nav-icons-group,
+  .nav-icons-group.left,
+  .nav-icons-group.right {
+    gap: 0;
+    padding: 0 2px;
+  }
+
+  .top-nav-center > .btn-play-tactical {
+    clip-path: none;
+    border-radius: 8px;
+    padding: 0 14px;
+    margin: 0 4px;
+    height: 44px;
+    font-size: 16px;
+    letter-spacing: 1px;
+  }
+
+  .menu-left-cards {
+    position: relative;
+    left: auto;
+    top: auto;
+    width: auto;
+    height: 200px;
+    margin: 12px 16px 0;
+  }
+
+  .menu-right-social,
+  .menu-right-social.collapsed {
+    position: relative;
+    right: auto;
+    top: auto;
+    bottom: auto;
+    width: auto;
+    min-height: 360px;
+    margin: 12px 16px 0;
+    padding: 16px;
+    align-items: stretch;
+  }
+
+  .menu-right-social.collapsed .social-expanded-content,
+  .menu-right-social.collapsed .social-tabs {
+    display: flex;
+  }
+
+  .menu-right-social.collapsed .social-collapsed-content,
+  .social-toggle-btn,
+  button.social-toggle-btn {
+    display: none;
+  }
+
+  .menu-left-chat {
+    position: relative !important;
+    left: auto !important;
+    bottom: auto !important;
+    width: auto !important;
+    max-width: none !important;
+    margin: 12px 16px 0;
+  }
+
+  .chat-hint {
+    display: none;
+  }
+
+  .game-mode-container {
+    position: relative;
+    left: auto;
+    right: auto;
+    top: auto;
+    bottom: auto;
+    margin: 12px 16px 0;
+  }
+
+  .mode-cards-wrapper {
+    flex-direction: column;
+  }
+
+  .mode-card {
+    max-width: none;
+    min-height: 160px;
+  }
+
+  .invite-toasts {
+    position: fixed;
+    top: calc(12px + env(safe-area-inset-top));
+  }
+
+  .mobile-play-cta {
+    display: flex;
+    justify-content: center;
+    position: fixed;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    z-index: 50;
+    padding: 12px 16px calc(12px + env(safe-area-inset-bottom));
+    background: linear-gradient(to top, rgba(2, 6, 23, 0.95) 40%, rgba(2, 6, 23, 0));
+    pointer-events: none;
+  }
+
+  .mobile-play-cta .btn-play-tactical {
+    pointer-events: auto;
+    width: 100%;
+    max-width: 420px;
+    margin: 0;
+    height: 52px;
+  }
+
+  .menu-dynamic-screen {
+    position: relative;
+    top: auto;
+    bottom: auto;
+    left: auto;
+    right: auto;
+    width: auto;
+    max-width: 100%;
+    padding: 16px;
+    border-radius: 14px;
+  }
+
+  .page-shell-content .dynamic-screen-header {
+    flex-wrap: wrap;
+  }
+
+  .page-shell-content .mbtn {
+    min-height: 44px;
+  }
+
+  /* Oyun ekranı */
+  .game-wrap {
+    padding: 8px;
+    overflow: hidden;
+  }
+
+  .game-title {
+    display: none;
+  }
+
+  .topbar {
+    top: 12px;
+  }
+
+  .board-wrap {
+    margin-top: 70px;
+    margin-bottom: 120px;
+  }
+
+  .board-3d-container {
+    transform: rotateX(54deg) rotateZ(-45deg) scale(0.46);
+  }
+
+  .hud-players {
+    top: 8px;
+    bottom: 8px;
+    left: 8px;
+    right: 8px;
+  }
+
+  .hud-player-card {
+    width: 132px;
+    padding: 4px;
+    gap: 6px;
+    border-width: 2px;
+  }
+
+  .hud-avatar-box {
+    width: 32px !important;
+    height: 32px !important;
+    min-width: 32px;
+  }
+
+  .hud-name {
+    font-size: 11px;
+  }
+
+  .hud-money-badge {
+    font-size: 10px;
+  }
+
+  .hud-player-card .money-pile-wrap {
+    display: none;
+  }
+
+  .hud-center-controls {
+    top: auto;
+    bottom: calc(100px + env(safe-area-inset-bottom));
+    transform: translateX(-50%);
+  }
+
+  .hud-right-actions {
+    bottom: calc(150px + env(safe-area-inset-bottom));
+    right: 8px;
+  }
+
+  .btn-round-action {
+    width: 44px;
+    height: 44px;
+    font-size: 18px;
+  }
+
+  .side-panel {
+    width: min(240px, 80vw);
+  }
+
+  .modal-stats-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 420px) {
+  .board-3d-container {
+    transform: rotateX(54deg) rotateZ(-45deg) scale(0.4);
+  }
+
+  .hud-player-card {
+    width: 118px;
+  }
+
+  .news-title {
+    font-size: 20px;
+  }
+}
+
+/* ==========================================
+   SAYFA KABUĞU, SİTE BAĞLANTILARI VE YASAL SAYFALAR
+   ========================================== */
+.skip-link {
+  position: fixed;
+  top: -60px;
+  left: 16px;
+  z-index: 20000;
+  padding: 10px 16px;
+  background: #00e5ff;
+  color: #000;
+  font-weight: 800;
+  border-radius: 8px;
+  text-decoration: none;
+}
+
+.skip-link:focus {
+  top: 12px;
+}
+
+.page-fade-in {
+  animation: ft26-page-in 0.25s ease-out both;
+}
+
+@keyframes ft26-page-in {
+  from { opacity: 0.001; }
+  to { opacity: 1; }
+}
+
+.page-shell-content {
+  margin-top: 80px;
+  padding: 20px;
+}
+
+button.auth-tab {
+  background: none;
+  border: none;
+  font-family: inherit;
+  min-height: 44px;
+}
+
+.site-footer nav {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 4px 18px;
+  padding: 12px 16px 20px;
+}
+
+.site-footer a {
+  color: #94a3b8;
+  font-size: 12px;
+  font-weight: 600;
+  text-decoration: none;
+  padding: 10px 2px;
+}
+
+.site-footer a:hover {
+  color: #ffffff;
+  text-decoration: underline;
+}
+
+.menu-footer-links {
+  position: absolute;
+  left: 50%;
+  bottom: 0;
+  transform: translateX(-50%);
+  z-index: 3;
+}
+
+.menu-footer-links nav {
+  padding: 6px 12px;
+}
+
+.menu-footer-links a {
+  font-size: 11px;
+  color: rgba(203, 213, 225, 0.75);
+}
+
+.legal-page {
+  max-width: 850px;
+  margin: 0 auto;
+  color: #e2e8f0;
+  padding: 28px;
+  background: rgba(11, 15, 25, 0.8);
+  border: 1px solid rgba(255, 255, 255, 0.06);
+  border-radius: 20px;
+  line-height: 1.65;
+}
+
+.legal-page h1 {
+  font-size: 28px;
+  color: #ffffff;
+  margin-bottom: 12px;
+}
+
+.legal-page h2 {
+  font-size: 17px;
+  color: #29b6f6;
+  margin: 24px 0 8px;
+}
+
+.legal-page ul {
+  padding-left: 20px;
+  margin: 0;
+}
+
+.legal-page li {
+  margin-bottom: 6px;
+}
+
+.legal-lead {
+  font-size: 15px;
+  color: #cbd5e1;
+}
+
+.legal-note {
+  font-size: 12px;
+  color: #fbbf24;
+  background: rgba(251, 191, 36, 0.08);
+  border: 1px solid rgba(251, 191, 36, 0.25);
+  border-radius: 8px;
+  padding: 8px 12px;
+}
+
+.legal-placeholder {
+  color: #fbbf24;
+  font-style: italic;
+}
+
+.legal-link {
+  color: #29b6f6;
+  display: inline-block;
+  padding: 10px 0;
+}
+
+.legal-cta {
+  display: inline-flex;
+  align-items: center;
+  min-height: 44px;
+  margin: 24px 12px 0 0;
+  text-decoration: none;
+}
+
+.faq-item {
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 10px;
+  padding: 0 14px;
+  margin-bottom: 8px;
+  background: rgba(255, 255, 255, 0.02);
+}
+
+.faq-item summary {
+  cursor: pointer;
+  font-weight: 700;
+  color: #ffffff;
+  padding: 12px 0;
+  min-height: 24px;
+}
+
+.faq-item p {
+  margin: 0 0 12px;
+  color: #cbd5e1;
+}
+
+/* 404 */
+.not-found-page {
+  min-height: 100dvh;
+  display: grid;
+  place-items: center;
+  padding: 24px 16px;
+  background: radial-gradient(circle at center, #0f172a 0%, #020617 100%);
+  color: #ffffff;
+  text-align: center;
+}
+
+.not-found-card {
+  max-width: 480px;
+}
+
+.not-found-code {
+  font-family: var(--font-display);
+  font-size: 88px;
+  line-height: 1;
+  margin: 8px 0;
+  color: #00e5ff;
+  text-shadow: 0 0 25px rgba(0, 229, 255, 0.4);
+}
+
+.not-found-card h1 {
+  font-size: 26px;
+  margin-bottom: 8px;
+}
+
+.not-found-card p {
+  color: #94a3b8;
+}
+
+.not-found-actions {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 12px;
+  margin-top: 24px;
+}
+
+.not-found-primary {
+  text-decoration: none;
+  margin: 0;
+}
+
+.not-found-secondary {
+  color: #29b6f6;
+  padding: 10px;
+}
+
+/* Çerez/analitik onayı ve oturum uyarısı */
+.consent-banner,
+.session-banner {
+  position: fixed;
+  left: 50%;
+  bottom: calc(16px + env(safe-area-inset-bottom));
+  transform: translateX(-50%);
+  z-index: 12000;
+  width: min(640px, calc(100vw - 32px));
+  box-sizing: border-box;
+  padding: 16px;
+  border-radius: 14px;
+  background: rgba(11, 15, 25, 0.97);
+  border: 1px solid rgba(41, 182, 246, 0.35);
+  box-shadow: 0 16px 40px rgba(0, 0, 0, 0.6);
+  color: #e2e8f0;
+  font-size: 13px;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.consent-banner p {
+  margin: 0;
+  flex: 1 1 280px;
+}
+
+.consent-banner a {
+  color: #29b6f6;
+}
+
+.consent-actions,
+.session-banner-actions {
+  display: flex;
+  gap: 8px;
+}
+
+.consent-actions .mbtn,
+.session-banner-actions .mbtn {
+  min-height: 44px;
+  margin: 0;
+  text-decoration: none;
+  display: inline-flex;
+  align-items: center;
+}
+
+.session-banner {
+  top: calc(16px + env(safe-area-inset-top));
+  bottom: auto;
+  border-color: rgba(255, 183, 77, 0.5);
+}
+
+/* Mağaza bildirimleri ve iskelet */
+.store-notice {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+  padding: 12px 14px;
+  margin-bottom: 14px;
+  border-radius: 10px;
+  font-size: 13px;
+  border: 1px solid rgba(41, 182, 246, 0.35);
+  background: rgba(41, 182, 246, 0.08);
+  color: #e2e8f0;
+}
+
+.store-notice.success {
+  border-color: rgba(46, 204, 113, 0.45);
+  background: rgba(46, 204, 113, 0.1);
+}
+
+.store-notice.error {
+  border-color: rgba(255, 82, 82, 0.45);
+  background: rgba(255, 82, 82, 0.1);
+}
+
+.store-skeleton-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+  gap: 20px;
+  padding: 10px;
+}
+
+.store-skeleton-card {
+  height: 300px;
+  border-radius: 12px;
+}
+
+/* Ayarlar sayfası ızgarası */
+.settings-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 24px;
+}
+
+.settings-footer-grid {
+  margin-top: 30px;
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 12px;
+  border-top: 1px solid rgba(255, 255, 255, 0.08);
+  padding-top: 20px;
+}
+
+@media (max-width: 768px) {
+  .menu-footer-links {
+    position: relative;
+    left: auto;
+    transform: none;
+  }
+
+  .page-shell-content {
+    margin-top: 150px;
+    padding: 12px;
+  }
+
+  .legal-page {
+    padding: 18px;
+    border-radius: 14px;
+  }
+
+  .legal-page h1 {
+    font-size: 22px;
+  }
+
+  .settings-grid,
+  .settings-footer-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .consent-banner {
+    bottom: calc(92px + env(safe-area-inset-bottom));
+  }
+}
+
+/* Dar sosyal panelde isim + aksiyonlar sığmazsa aksiyonlar alt satıra geçer */
+.menu-right-social .friend-row {
+  flex-wrap: wrap;
+  row-gap: 6px;
+}
+
+.menu-right-social .friend-info {
+  flex: 1 1 96px;
+}
+
+/* Global reset body'yi kaydırılamaz yapar (oyun ekranı için). Menü dışı sayfalar kendi
+   kaydırma alanında çalışır; böylece uzun içerik (kurallar, gizlilik, mobil mağaza) kesilmez. */
+.page-shell {
+  position: fixed;
+  inset: 0;
+  overflow-y: auto;
+  overflow-x: hidden;
+  -webkit-overflow-scrolling: touch;
+}
+
+.page-shell .menu-top-nav {
+  background: linear-gradient(to bottom, rgba(2, 6, 23, 0.95), rgba(2, 6, 23, 0.8));
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+}
+
+.empty-state {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 12px;
+  padding: 40px 16px;
+  text-align: center;
+  color: #cbd5e1;
+}
+
+.empty-state-icon {
+  font-size: 36px;
+}
+
+.empty-state p {
+  margin: 0;
+  max-width: 420px;
+}
+
+.empty-state.error p {
+  color: #ffb74d;
+}
+
+.empty-state-action {
+  min-height: 44px;
+  display: inline-flex;
+  align-items: center;
+  text-decoration: none;
+}
+
+/* Masaüstünde içerik kartı (menu-dynamic-screen) mutlak konumludur; site bağlantıları
+   kartın altına sabitlenir, kart da onlara yer bırakır. Mobilde kart normal akışta. */
+@media (min-width: 769px) {
+  .page-shell:has(.menu-dynamic-screen) .menu-dynamic-screen {
+    bottom: 44px;
+  }
+
+  .page-shell:has(.menu-dynamic-screen) > .site-footer {
+    position: absolute;
+    left: 0;
+    right: 0;
+    bottom: 0;
+  }
+
+  .page-shell:has(.menu-dynamic-screen) > .site-footer nav {
+    padding: 4px 16px;
+  }
+}

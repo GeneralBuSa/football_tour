@@ -1,4 +1,4 @@
-﻿# Bağımlılıklar
+# Bağımlılıklar
 node_modules/
 .codebase-memory/
 npm-debug.log*
@@ -14,6 +14,17 @@ build/
 .env
 .env.local
 .env.*.local
+# .env.production, .env.development vb. hiçbir ortam dosyası repoya girmez; sadece örnekler girer
+.env.*
+!.env.example
+# Anahtar/sertifika dosyaları
+*.pem
+*.key
+*.p12
+*.pfx
+# Supabase CLI yerel durumu
+supabase/.temp/
+supabase/.branches/
 
 # IDE / Editör
 .vscode/
@@ -59,3 +70,5 @@ temp/
 frontend/.next/
 frontend/out/
 
+# Claude Code yerel ayarları (izinler vb. kişiseldir); launch.json paylaşılabilir
+.claude/settings.local.json

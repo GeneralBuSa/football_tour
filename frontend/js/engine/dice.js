@@ -37,6 +37,10 @@ export function rollDice() {
   const totalSteps = d1 + d2;
 
   setTutorialText(`${PLAYERS[currentPlayer].name} zar atıyor... Sonuç: 🎲 ${d1} + 🎲 ${d2} = ${totalSteps} adım!`);
+  const diceResult = document.getElementById('dice-result');
+  if (diceResult) {
+    diceResult.innerHTML = `<span class="die">${d1}</span><span class="die">${d2}</span><span class="dice-total">${totalSteps} adım</span>`;
+  }
   updateTutorialHUD();
 
   setTimeout(() => {

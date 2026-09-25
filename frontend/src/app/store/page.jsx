@@ -3,27 +3,37 @@ import { useEffect, useState } from 'react';
 import useSession from '../shared/useSession.js';
 import PageShell from '../shared/PageShell.jsx';
 import { getPlayerByKey } from '../../../js/data/playerCatalog.js';
+import { trackEvent } from '../../../services/analytics.js';
 
 export default function Page() {
-  const { isLoggedIn, user, stats, setStats, language, mounted, gameReady, t, apiService } = useSession();
+  const { isLoggedIn, user, stats, setStats, language, mounted, gameReady, t, apiService } = useSession({ loadGame: false });
   const [items, setItems] = useState([]);
   const [purchases, setPurchases] = useState([]);
   const [entitlements, setEntitlements] = useState([]);
   const [coinPacks, setCoinPacks] = useState([]);
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState('');
+  const [notice, setNotice] = useState(null);
+  const [busyKey, setBusyKey] = useState('');
+
+  // Stripe Checkout dönüşü: ödeme sonucu kullanıcıya açıkça bildirilir.
+  useEffect(() => {
+    const payment = new URLSearchParams(window.location.search).get('payment');
+    const isEn = localStorage.getItem('ft26_language') === 'English';
+    if (payment === 'success') {
+      setNotice({ type: 'success', text: isEn
+        ? 'Thank you! Your payment was received. Coins are added as soon as Stripe confirms the payment — refresh in a moment if your balance has not updated yet.'
+        : 'Teşekkürler! Ödemen alındı. Coin’ler Stripe ödemeyi onayladığı anda hesabına eklenir; bakiyen güncellenmediyse birkaç saniye sonra sayfayı yenile.' });
+      trackEvent('purchase', { type: 'coin_pack' });
+    } else if (payment === 'cancelled') {
+      setNotice({ type: 'info', text: isEn ? 'Payment was cancelled. You were not charged.' : 'Ödeme iptal edildi. Herhangi bir ücret alınmadı.' });
+    }
+  }, []);
 
   useEffect(() => {
     if (!gameReady) return;
-
-    if (isLoggedIn && user) {
-      loadData(user.id);
-    } else {
-      setLoading(false);
-      setItems([]);
-      setEntitlements([]);
-      setLoadError('');
-    }
+    // Katalog ve coin paketleri herkese açıktır; misafirler de ürünleri görebilir.
+    loadData(isLoggedIn && user ? user.id : null);
   }, [gameReady, isLoggedIn, user]);
 
   const loadData = async (userId) => {
@@ -32,29 +42,24 @@ export default function Page() {
       setLoadError('');
       const [itemsRes, purchasesRes, entitlementsRes, packsRes] = await Promise.all([
         apiService.getStoreItems(),
-        apiService.getMyPurchases(),
-        apiService.getCharacterEntitlements(),
+        userId ? apiService.getMyPurchases() : Promise.resolve([]),
+        userId ? apiService.getCharacterEntitlements() : Promise.resolve([]),
         apiService.getCoinPacks()
       ]);
 
-      if (Array.isArray(itemsRes) && itemsRes.length > 0) {
+      if (Array.isArray(itemsRes)) {
         setItems(itemsRes);
       } else {
         setItems([]);
-        setLoadError(itemsRes?.error || 'Mağaza ürünleri yüklenemedi.');
+        setLoadError(itemsRes?.error || (language === 'English' ? 'Store items could not be loaded.' : 'Mağaza ürünleri yüklenemedi.'));
       }
 
-      if (Array.isArray(purchasesRes)) {
-        setPurchases(purchasesRes);
-      }
-
-      if (Array.isArray(entitlementsRes)) {
-        setEntitlements(entitlementsRes);
-      }
-
+      if (Array.isArray(purchasesRes)) setPurchases(purchasesRes);
+      if (Array.isArray(entitlementsRes)) setEntitlements(entitlementsRes);
       if (Array.isArray(packsRes)) setCoinPacks(packsRes);
     } catch (e) {
-      console.error("Mağaza verileri yüklenirken hata:", e);
+      console.error('Mağaza verileri yüklenirken hata:', e);
+      setLoadError(language === 'English' ? 'Store could not be loaded. Check your connection and try again.' : 'Mağaza yüklenemedi. Bağlantını kontrol edip tekrar dene.');
     } finally {
       setLoading(false);
     }
@@ -62,51 +67,51 @@ export default function Page() {
 
   const handleCoinPack = async (pack) => {
     if (!isLoggedIn) {
-      alert(t.store_login_required);
+      window.location.assign('/auth?next=/store');
       return;
     }
+    if (busyKey) return;
+    setBusyKey(`pack:${pack.key}`);
+    setNotice(null);
+    trackEvent('begin_checkout', { pack: pack.key });
     const result = await apiService.createCoinCheckout(pack.key);
     if (result?.checkout_url) {
       window.location.href = result.checkout_url;
-    } else {
-      alert(result?.error || 'Ödeme sayfası oluşturulamadı.');
+      return;
     }
+    setBusyKey('');
+    setNotice({ type: 'error', text: result?.error || (language === 'English' ? 'Payment page could not be created. Please try again.' : 'Ödeme sayfası oluşturulamadı. Lütfen tekrar dene.') });
   };
 
   const handlePurchase = async (item) => {
     if (!isLoggedIn) {
-      alert(t.store_login_required);
+      window.location.assign('/auth?next=/store');
       return;
     }
+    if (busyKey) return;
 
     const currentBalance = stats.total_earnings || 0;
     if (currentBalance < item.price) {
-      alert(t.store_insufficient_funds);
+      setNotice({ type: 'error', text: t.store_insufficient_funds });
       return;
     }
 
+    setBusyKey(`item:${item.id}`);
+    setNotice(null);
     try {
-      setLoading(true);
-      
-      let res;
-      res = await apiService.purchaseItem(item.id);
-
-      if (res && !res.error) {
-        if (typeof res.balance !== 'number') {
-          throw new Error(language === 'English' ? 'Invalid purchase response' : 'Geçersiz satın alma yanıtı');
-        }
-        const newBalance = res.balance;
-        setStats(prev => ({ ...prev, total_earnings: newBalance }));
-        
-        alert(t.store_purchase_success.replace('{name}', item.name));
-        loadData(user.id);
+      const res = await apiService.purchaseItem(item.id);
+      if (res && !res.error && typeof res.balance === 'number') {
+        setStats(prev => ({ ...prev, total_earnings: res.balance }));
+        setNotice({ type: 'success', text: t.store_purchase_success.replace('{name}', item.name) });
+        trackEvent('purchase', { type: 'store_item' });
+        await loadData(user.id);
       } else {
-        alert(t.store_purchase_error.replace('{error}', res?.error || (language === 'English' ? 'Transaction failed' : 'İşlem gerçekleştirilemedi')));
+        setNotice({ type: 'error', text: t.store_purchase_error.replace('{error}', res?.error || (language === 'English' ? 'Transaction failed' : 'İşlem gerçekleştirilemedi')) });
       }
     } catch (e) {
-      alert(t.store_purchase_failed);
+      setNotice({ type: 'error', text: t.store_purchase_failed });
     } finally {
-      setLoading(false);
+      setBusyKey('');
     }
   };
 
@@ -119,9 +124,9 @@ export default function Page() {
       const playerKey = item.sku?.startsWith('player_')
         ? item.sku.replace('player_', '')
         : item.name?.toLowerCase().replace(/^the\s+/, '');
-      
-      const hasEntitlement = entitlements.some(e => 
-        e.character_key === playerKey || 
+
+      const hasEntitlement = entitlements.some(e =>
+        e.character_key === playerKey ||
         `player_${e.character_key}` === item.sku ||
         e.character_name?.toLowerCase() === item.name?.toLowerCase()
       );
@@ -132,31 +137,48 @@ export default function Page() {
   };
 
   return (
-    <PageShell activePage="store" stats={stats} t={t} mounted={mounted}>
+    <PageShell activePage="store" stats={stats} t={t} language={language}>
       <div className="menu-dynamic-screen">
         <div className="dynamic-screen-header" style={{display: 'flex', alignItems: 'center', gap: '16px'}}>
-          <button className="btn-mode-back" onClick={() => {window.location.href='/'}} style={{margin: '0', padding: '6px 12px', fontSize: '12px'}}>← {t.back}</button>
-          <span>{t.store_title === "Mağaza" ? "🛒 OYUN İÇİ MAĞAZA" : "🛒 IN-GAME STORE"}</span>
+          <a className="btn-mode-back" href="/" style={{margin: '0', padding: '10px 12px', fontSize: '12px', textDecoration: 'none'}}>← {t.back}</a>
+          <h1 style={{ fontSize: 'inherit', margin: 0 }}>{language === 'English' ? '🛒 IN-GAME STORE' : '🛒 OYUN İÇİ MAĞAZA'}</h1>
         </div>
         <div className="dynamic-screen-body" style={{marginTop: '20px'}}>
-           {isLoggedIn && coinPacks.length > 0 && (
+           {notice && (
+             <div role={notice.type === 'error' ? 'alert' : 'status'} className={`store-notice ${notice.type}`}>
+               <span>{notice.text}</span>
+               <button type="button" className="link-button" onClick={() => setNotice(null)} aria-label={language === 'English' ? 'Dismiss' : 'Kapat'}>✕</button>
+             </div>
+           )}
+           {!isLoggedIn && !loading && (
+             <div className="store-notice info" role="note">
+               <span>{language === 'English'
+                 ? 'Browse freely. Log in to spend your 2,000 starting coins.'
+                 : 'Ürünlere göz atabilirsin. Satın almak için giriş yap; yeni hesaplar 2.000 coin ile başlar.'}</span>
+               <a className="mbtn mbtn-buy" href="/auth?next=/store" style={{ textDecoration: 'none', margin: 0 }}>{language === 'English' ? 'Log in' : 'Giriş Yap'}</a>
+             </div>
+           )}
+           {coinPacks.length > 0 && (
              <section style={{ padding: '16px', border: '1px solid rgba(255,183,77,.25)', borderRadius: '12px', background: 'rgba(255,183,77,.04)' }}>
                <h2 style={{ margin: '0 0 12px', color: '#ffb74d', fontSize: '16px' }}>🪙 Coin satın al</h2>
                <div style={{ display: 'flex', flexWrap: 'wrap', gap: '10px' }}>
                  {coinPacks.map(pack => (
-                   <button key={pack.key} type="button" className="mbtn mbtn-buy" onClick={() => handleCoinPack(pack)} disabled={loading}>
-                     {pack.coins.toLocaleString()} coin · ${(pack.amountUsdCents / 100).toFixed(2)}
+                   <button key={pack.key} type="button" className="mbtn mbtn-buy" onClick={() => handleCoinPack(pack)} disabled={loading || !!busyKey} aria-busy={busyKey === `pack:${pack.key}`} style={{ minHeight: '44px' }}>
+                     {busyKey === `pack:${pack.key}` ? (language === 'English' ? 'Redirecting…' : 'Yönlendiriliyor…') : `${pack.coins.toLocaleString()} coin · $${(pack.amountUsdCents / 100).toFixed(2)}`}
                    </button>
                  ))}
                </div>
              </section>
            )}
-           {loading ? (
-             <div style={{color: '#fff', textAlign: 'center', padding: '40px'}}>{t.loading}</div>
+           {loading && items.length === 0 ? (
+             <div className="store-skeleton-grid" aria-busy="true" aria-label={t.loading}>
+               {[0, 1, 2, 3].map(i => <div key={i} className="skeleton-row store-skeleton-card" />)}
+             </div>
            ) : loadError ? (
-             <div style={{color: '#ffb74d', textAlign: 'center', padding: '40px'}}>{loadError}</div>
-           ) : !isLoggedIn ? (
-             <div style={{color: '#aaa', textAlign: 'center', padding: '40px'}}>{t.store_login_required}</div>
+             <div role="alert" style={{color: '#ffb74d', textAlign: 'center', padding: '40px'}}>
+               <p>{loadError}</p>
+               <button type="button" className="mbtn mbtn-buy" onClick={() => loadData(isLoggedIn && user ? user.id : null)}>{language === 'English' ? 'Try again' : 'Tekrar dene'}</button>
+             </div>
            ) : items.length === 0 ? (
              <div style={{color: '#aaa', textAlign: 'center', padding: '40px'}}>{language === 'English' ? 'No store items are available.' : 'Mağazada gösterilecek ürün yok.'}</div>
            ) : (
@@ -174,14 +196,14 @@ export default function Page() {
                                       item.type === 'Zar' || item.type === 'Dice' ? t.store_item_dice :
                                       item.type === 'Rozet' || item.type === 'Badge' ? t.store_item_badge :
                                       item.type === 'Player' ? (language === 'English' ? 'Player' : 'Futbolcu') : item.type;
-                
+
                 const getItemImage = (name) => {
                   if (!name) return null;
                   const n = name.toLowerCase();
-                  if (n.includes('piyon') || n.includes('pawn') || n.includes('kutu') || n.includes('box')) return '/assets/store_gold_pawn_box.png';
-                  if (n.includes('stadyum') || n.includes('stadium') || n.includes('tema') || n.includes('theme')) return '/assets/store_stadium_theme.png';
-                  if (n.includes('zar') || n.includes('dice') || n.includes('elmas') || n.includes('diamond')) return '/assets/store_diamond_dice.png';
-                  if (n.includes('vip') || n.includes('rozet') || n.includes('badge')) return '/assets/store_vip_badge.png';
+                  if (n.includes('piyon') || n.includes('pawn') || n.includes('kutu') || n.includes('box')) return '/assets/store_gold_pawn_box.webp';
+                  if (n.includes('stadyum') || n.includes('stadium') || n.includes('tema') || n.includes('theme')) return '/assets/store_stadium_theme.webp';
+                  if (n.includes('zar') || n.includes('dice') || n.includes('elmas') || n.includes('diamond')) return '/assets/store_diamond_dice.webp';
+                  if (n.includes('vip') || n.includes('rozet') || n.includes('badge')) return '/assets/store_vip_badge.webp';
                   return null;
                 };
                 const playerKey = item.type === 'Player'
@@ -220,14 +242,18 @@ export default function Page() {
                         alignItems: 'center',
                         justifyContent: 'center'
                       }}>
-                        <img 
-                          src={imgUrl} 
-                          alt={item.name} 
-                          style={{ 
-                            width: '100%', 
-                            height: '100%', 
+                        <img
+                          src={imgUrl}
+                          alt=""
+                          width="140"
+                          height="140"
+                          loading="lazy"
+                          decoding="async"
+                          style={{
+                            width: '100%',
+                            height: '100%',
                             objectFit: 'cover'
-                          }} 
+                          }}
                         />
                       </div>
                     ) : (
@@ -237,23 +263,25 @@ export default function Page() {
                     )}
                     <h3 style={{fontSize: '16px', fontWeight: 'bold', margin: '4px 0', textAlign: 'center', color: '#00e5ff'}}>{item.name}</h3>
                     <span style={{
-                      fontSize: '11px', 
-                      background: 'rgba(255,255,255,0.06)', 
+                      fontSize: '11px',
+                      background: 'rgba(255,255,255,0.06)',
                       border: '1px solid rgba(255,255,255,0.1)',
-                      padding: '2px 10px', 
+                      padding: '2px 10px',
                       borderRadius: '12px',
                       marginBottom: '14px',
                       color: '#aaa'
                     }}>{localizedType}</span>
-                    
+
                     <div style={{display: 'flex', alignItems: 'center', gap: '6px', marginBottom: '16px'}}>
                       <span style={{fontSize: '18px'}}>🪙</span>
                       <span style={{fontSize: '16px', fontWeight: 'bold', color: '#ffb74d'}}>{item.price.toLocaleString()} coin</span>
                     </div>
 
-                    <button 
+                    <button
+                      type="button"
                       onClick={() => !purchased && handlePurchase(item)}
-                      disabled={purchased || (!canAfford && isLoggedIn)}
+                      disabled={purchased || (!canAfford && isLoggedIn) || !!busyKey}
+                      aria-busy={busyKey === `item:${item.id}`}
                       className={`mbtn ${purchased ? 'mbtn-pass' : 'mbtn-buy'}`}
                       style={{
                         width: '100%',
@@ -263,7 +291,7 @@ export default function Page() {
                         opacity: (purchased || (!canAfford && isLoggedIn)) ? 0.6 : 1
                       }}
                     >
-                      {purchased ? t.store_purchased : !canAfford && isLoggedIn ? (language === 'English' ? 'INSUFFICIENT FUNDS' : 'YETERSİZ BAKİYE') : t.store_buy}
+                      {busyKey === `item:${item.id}` ? (language === 'English' ? 'PROCESSING…' : 'İŞLENİYOR…') : purchased ? t.store_purchased : !isLoggedIn ? (language === 'English' ? 'LOG IN TO BUY' : 'SATIN ALMAK İÇİN GİRİŞ YAP') : !canAfford ? (language === 'English' ? 'INSUFFICIENT FUNDS' : 'YETERSİZ BAKİYE') : t.store_buy}
                     </button>
                   </div>
                 );

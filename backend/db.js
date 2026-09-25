@@ -4,8 +4,26 @@ import { requireEnv } from './middleware/auth.js';
 
 dotenv.config();
 
-const supabaseUrl = requireEnv('SUPABASE_URL');
-const supabaseKey = requireEnv('SUPABASE_SERVICE_KEY');
+let client = null;
 
-// Backend uses the service role key to bypass RLS and manage data.
-export const supabase = createClient(supabaseUrl, supabaseKey);
+function getClient() {
+  if (!client) {
+    // Backend uses the service role key to bypass RLS and manage data.
+    client = createClient(requireEnv('SUPABASE_URL'), requireEnv('SUPABASE_SERVICE_KEY'));
+  }
+  return client;
+}
+
+// Testler ve yerel "memory" modu gerçek Supabase yerine aynı API'ye sahip bir
+// istemci enjekte edebilir. Uygulama kodu her zaman `supabase` üzerinden çalışır.
+export function setSupabaseClient(nextClient) {
+  client = nextClient;
+}
+
+export const supabase = new Proxy({}, {
+  get(_target, prop) {
+    const target = getClient();
+    const value = target[prop];
+    return typeof value === 'function' ? value.bind(target) : value;
+  }
+});

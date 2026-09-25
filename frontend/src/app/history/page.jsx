@@ -2,19 +2,28 @@
 import { useEffect, useState } from 'react';
 import useSession from '../shared/useSession.js';
 import PageShell from '../shared/PageShell.jsx';
+import EmptyState from '../shared/EmptyState.jsx';
 
 export default function Page() {
-  const { isLoggedIn, user, stats, language, mounted, gameReady, t, apiService } = useSession();
+  const { isLoggedIn, user, stats, language, mounted, gameReady, t, apiService } = useSession({ loadGame: false });
   const [history, setHistory] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState('');
+
+  const loadHistory = () => {
+    setLoading(true);
+    setLoadError('');
+    apiService.getGameHistory(user.id).then(res => {
+      if (Array.isArray(res)) setHistory(res);
+      else setLoadError(res?.error || 'Maç geçmişi yüklenemedi.');
+    }).catch(() => setLoadError('Maç geçmişi yüklenemedi.')).finally(() => setLoading(false));
+  };
 
   useEffect(() => {
     if (!gameReady) return;
 
     if (isLoggedIn && user) {
-      apiService.getGameHistory(user.id).then(res => {
-        if (Array.isArray(res)) setHistory(res);
-      }).catch(console.error).finally(() => setLoading(false));
+      loadHistory();
     } else {
       setLoading(false);
     }
@@ -31,7 +40,9 @@ export default function Page() {
           {loading ? (
             <div style={{color: '#fff', textAlign: 'center', padding: '40px'}}>{t.loading}</div>
           ) : !isLoggedIn ? (
-            <div style={{color: '#aaa', textAlign: 'center', padding: '40px'}}>{t.history_login_required}</div>
+            <EmptyState icon="🔒" message={t.history_login_required} actionLabel={t.login_btn || 'Giriş Yap'} actionHref="/auth?next=/history" />
+          ) : loadError ? (
+            <EmptyState icon="⚠️" tone="error" message={`${loadError} Bağlantını kontrol edip tekrar dene.`} actionLabel={language === 'English' ? 'Try again' : 'Tekrar dene'} onAction={loadHistory} />
           ) : (
             <div className="history-list" id="history-container" style={{
               display: 'flex',
@@ -40,7 +51,7 @@ export default function Page() {
               padding: '10px'
             }}>
               {history.length === 0 ? (
-                <div style={{color: '#aaa', textAlign: 'center', padding: '20px'}}>{t.history_empty}</div>
+                <EmptyState icon="⚽" message={language === 'English' ? 'No matches yet. Play your first match to see results here.' : 'Henüz maç oynamadın. İlk maçını oyna, sonuçların burada görünsün.'} actionLabel={language === 'English' ? 'PLAY FIRST MATCH' : 'İLK MAÇINI OYNA'} actionHref="/?play=true" />
               ) : (
                 history.map((game, idx) => {
                   const players = game.result_data?.players || [];

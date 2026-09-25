@@ -2,11 +2,12 @@
 import { useEffect, useState } from 'react';
 import useSession from '../shared/useSession.js';
 import PageShell from '../shared/PageShell.jsx';
+import EmptyState from '../shared/EmptyState.jsx';
 import { getPlayerByKey } from '../../../js/data/playerCatalog.js';
 import apiService from '../../../services/ApiService.js';
 
 export default function ProfilePage() {
-  const { isLoggedIn, user: sessionUser, stats, setStats, language, mounted, gameReady, t, apiService: api } = useSession();
+  const { isLoggedIn, user: sessionUser, stats, setStats, language, mounted, gameReady, t, apiService: api } = useSession({ loadGame: false });
   const [user, setUser] = useState(null);
   const [purchases, setPurchases] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -23,6 +24,20 @@ export default function ProfilePage() {
       }
     }
   }, []);
+
+  // Oyunda kullanılacak karakter sunucuda saklanır; çevrimiçi rakip de bu modeli görür.
+  const [characterStatus, setCharacterStatus] = useState({ key: '', text: '', error: false });
+  const selectCharacter = async (characterKey) => {
+    if (characterStatus.key === 'pending') return;
+    setCharacterStatus({ key: 'pending', text: '', error: false });
+    const res = await apiService.selectCharacter(characterKey);
+    if (res?.error) {
+      setCharacterStatus({ key: characterKey, text: res.error, error: true });
+      return;
+    }
+    setUser(prev => ({ ...prev, selected_character: res.selected_character }));
+    setCharacterStatus({ key: characterKey, text: language === 'English' ? 'Your pawn in matches is updated.' : 'Maçlardaki piyonun güncellendi.', error: false });
+  };
 
   const toggleEquip = (itemId) => {
     setEquippedItems(prev => {
@@ -280,7 +295,7 @@ export default function ProfilePage() {
           {loading ? (
             <div style={{ color: '#fff', textAlign: 'center', padding: '40px' }}>{t.loading}</div>
           ) : !isLoggedIn ? (
-            <div style={{ color: '#aaa', textAlign: 'center', padding: '40px' }}>{t.profile_login_required}</div>
+            <EmptyState icon="🔒" message={t.profile_login_required} actionLabel={t.login_btn || 'Giriş Yap'} actionHref="/auth?next=/profile" />
           ) : (
             <div style={{
               display: 'grid',
@@ -417,6 +432,9 @@ export default function ProfilePage() {
                   <div style={{ fontSize: '11px', color: '#8892b0', marginTop: '8px', textAlign: 'right', fontWeight: '500' }}>
                     {t.profile_next_level} <span style={{ color: '#fff' }}>{nextLevelXp - currentXp} XP</span>
                   </div>
+                  <a href="/battlepass" style={{ display: 'inline-block', marginTop: '10px', padding: '8px 0', fontSize: '12px', fontWeight: '700', color: '#29b6f6' }}>
+                    {language === 'English' ? 'View battle pass rewards →' : 'Savaş bileti ödüllerini gör →'}
+                  </a>
                 </div>
               </div>
 
@@ -535,7 +553,8 @@ export default function ProfilePage() {
                     }}>
                       {purchases.map((p, idx) => {
                         const itemId = p.item_id || p.id || p.store_items?.id || `item-${idx}`;
-                        const isEquipped = !!equippedItems[itemId];
+                        const isCharacter = !!p.character_key;
+                        const isEquipped = isCharacter ? user?.selected_character === p.character_key : !!equippedItems[itemId];
                         const itemName = p.store_items?.name || p.item_name || 'Özel Eşya';
                         const rawType = p.store_items?.type || p.item_type || 'Eşya';
                         const localizedType = rawType === 'Kutu' || rawType === 'Box' ? t.store_item_box :
@@ -547,10 +566,10 @@ export default function ProfilePage() {
                         const getItemImage = (name) => {
                           if (!name) return null;
                           const n = name.toLowerCase();
-                          if (n.includes('piyon') || n.includes('pawn') || n.includes('kutu') || n.includes('box')) return '/assets/store_gold_pawn_box.png';
-                          if (n.includes('stadyum') || n.includes('stadium') || n.includes('tema') || n.includes('theme')) return '/assets/store_stadium_theme.png';
-                          if (n.includes('zar') || n.includes('dice') || n.includes('elmas') || n.includes('diamond')) return '/assets/store_diamond_dice.png';
-                          if (n.includes('vip') || n.includes('rozet') || n.includes('badge')) return '/assets/store_vip_badge.png';
+                          if (n.includes('piyon') || n.includes('pawn') || n.includes('kutu') || n.includes('box')) return '/assets/store_gold_pawn_box.webp';
+                          if (n.includes('stadyum') || n.includes('stadium') || n.includes('tema') || n.includes('theme')) return '/assets/store_stadium_theme.webp';
+                          if (n.includes('zar') || n.includes('dice') || n.includes('elmas') || n.includes('diamond')) return '/assets/store_diamond_dice.webp';
+                          if (n.includes('vip') || n.includes('rozet') || n.includes('badge')) return '/assets/store_vip_badge.webp';
                           return null;
                         };
                         const imgUrl = p.character_image || getItemImage(itemName);
@@ -606,7 +625,10 @@ export default function ProfilePage() {
                             </div>
 
                             <button
-                              onClick={() => toggleEquip(itemId)}
+                              type="button"
+                              aria-pressed={isEquipped}
+                              disabled={isCharacter && characterStatus.key === 'pending'}
+                              onClick={() => (isCharacter ? selectCharacter(p.character_key) : toggleEquip(itemId))}
                               style={{
                                 width: '100%',
                                 background: isEquipped ? 'rgba(46, 204, 113, 0.2)' : 'rgba(41, 182, 246, 0.15)',
@@ -622,8 +644,15 @@ export default function ProfilePage() {
                                 boxShadow: isEquipped ? '0 0 10px rgba(46, 204, 113, 0.2)' : 'none'
                               }}
                             >
-                              {isEquipped ? '✓ Kuşanıldı' : 'Kuşan'}
+                              {isCharacter
+                                ? (isEquipped ? (language === 'English' ? '✓ Your pawn' : '✓ Oyundaki piyonun') : (language === 'English' ? 'Use in matches' : 'Maçlarda kullan'))
+                                : (isEquipped ? '✓ Kuşanıldı' : 'Kuşan')}
                             </button>
+                            {isCharacter && characterStatus.key === p.character_key && characterStatus.text && (
+                              <div role={characterStatus.error ? 'alert' : 'status'} style={{ fontSize: '11px', marginTop: '6px', color: characterStatus.error ? '#ff8a80' : '#69f0ae' }}>
+                                {characterStatus.text}
+                              </div>
+                            )}
                           </div>
                         );
                       })}
@@ -777,7 +806,7 @@ export default function ProfilePage() {
                     {/* Arka planda tam fotoğraf (Düşük Opaklık / Dimmed View) */}
                     <img
                       src={cropImageSrc}
-                      alt="Tam Fotoğraf"
+                      alt=""
                       draggable={false}
                       style={{
                         ...imgStyle,
@@ -802,7 +831,7 @@ export default function ProfilePage() {
                     }}>
                       <img
                         src={cropImageSrc}
-                        alt="Profil Resmi Kırpma"
+                        alt="Kırpılacak profil fotoğrafı önizlemesi"
                         draggable={false}
                         style={{
                           ...imgStyle,

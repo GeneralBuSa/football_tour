@@ -1,16 +1,19 @@
-﻿# Football Tour Simulator (FT26)
+# Football Tour Simulator (FT26)
 
 Futbol temalı, Monopoly tarzı strateji ve yönetim oyunu. Projede Next.js tabanlı web arayüzü, Express tabanlı REST API, Supabase/PostgreSQL veri katmanı ve opsiyonel Tauri masaüstü kabuğu bulunur.
 
-> Not: Çevrimiçi lobi, özel oda eşleştirmesi ve SSE tabanlı state aktarımı vardır. Üretim ölçeğinde çoklu instance desteği ve server-authoritative oyun komutları henüz tamamlanmamıştır.
+> Not: Çevrimiçi hızlı eşleşme, özel oda, arkadaş listesi, arkadaşlar arası canlı mesajlaşma ve SSE tabanlı canlı hamle aktarımı vardır. Üretim ölçeğinde çoklu instance desteği ve server-authoritative oyun komutları henüz tamamlanmamıştır.
 
 ## Özellikler
 
 | Özellik | Durum | Açıklama |
 |---------|-------|----------|
 | Tek oyunculu oyun | Var | Yerel oyun motoru, zar, mülk, kira ve stadyum akışı |
-| Çevrimiçi lobi | Kısmi | Supabase tabanlı eşleştirme kuyruğu |
-| Özel oda | Kısmi | Kullanıcı adı ile oda oluşturma/katılma |
+| Çevrimiçi lobi | Var | Advisory lock'lu eşleştirme kuyruğu, bayat kayıt temizliği, iptal bildirimi |
+| Özel oda | Var | Kullanıcı adı ile oda oluşturma/katılma, arkadaşa oyun daveti |
+| Arkadaşlar & mesaj | Var | İstek gönder/kabul/reddet/geri çek, arkadaş çıkar, canlı özel mesaj, çevrimiçi durumu |
+| Yerel maç | Var | Hesap gerektirmeyen 2 kişilik aynı cihaz modu |
+| Hesap silme | Var | Ayarlar sayfasından şifre doğrulamalı kalıcı silme |
 | Auth | Var | Kayıt, giriş, profil ve avatar güncelleme |
 | Başarımlar | Var | Yerel + Supabase kayıt desteği |
 | Savaş bileti | Kısmi | XP tabanlı seviye görünümü |
@@ -73,7 +76,7 @@ STRIPE_WEBHOOK_SECRET=whsec_...
 
 ### Veritabanı
 
-Supabase SQL editor veya `psql` ile şemayı çalıştırın:
+Supabase SQL editor veya `psql` ile şemayı çalıştırın. Şema idempotent'tir; **mevcut bir veritabanında da yeniden çalıştırılmalıdır** (eşleştirme fonksiyonlarındaki `column reference is ambiguous` hatasının düzeltmesi, `lobby_queue.last_seen`, `direct_messages` tablosu ve `apply_session_result` bu sürümle gelir):
 
 ```bash
 psql -U postgres -d football_tour -f database/schema.sql
@@ -99,6 +102,7 @@ Schema şunları oluşturur:
 - `coin_ledger`
 - `coin_orders`
 - `coin_pack_catalog`
+- `direct_messages`
 
 Ayrıca futbolcu kataloğunu (Architect/King: 500 coin, Viking/Rocket/Wizard: 300 coin) ve coin paketlerini seed eder. Coin paketleri: 100 coin = 1,50 USD; 300 coin = 4 USD; 500 coin = 5 USD; 1000 coin = 8 USD. Coin yükleme için Stripe Checkout oturumu oluşturulur; coin yalnızca imzalı webhook ile başarılı ödeme sonrasında verilir.
 
@@ -122,8 +126,20 @@ Varsayılan backend API: `http://localhost:8000/api`
 # Backend geliştirme
 cd backend && npm run dev
 
-# Backend testleri
+# Backend: Supabase olmadan, bellek içi Postgres (PGlite) + gerçek şema ile API
+cd backend && npm run dev:memory
+
+# Backend testleri (birim + SQL + API entegrasyon + uçtan uca smoke)
 cd backend && npm test
+
+# Çalışan bir API'ye karşı smoke kontrolü (SMOKE_WRITE=1 geçici kullanıcılarla akışları da dener)
+cd backend && SMOKE_API_URL=https://api.example.com/api npm run smoke
+
+# Frontend birim testleri (oyun motoru, canlı senkronizasyon, API istemcisi)
+cd frontend && npm run test:unit
+
+# Frontend build smoke testi (build sonrası meta/robots/sitemap/404 kontrolleri)
+cd frontend && npm run build && npm run test:build
 
 # Backend syntax kontrolü
 cd backend && npm run check
@@ -151,12 +167,26 @@ cd frontend && npm run tauri dev
 - Supabase RLS politikaları service role API kullanımına göre sınırlandırılmıştır.
 - Tauri allowlist daraltılmıştır; yeni Tauri API ihtiyacı doğarsa sadece gereken izin açılmalıdır.
 
+## Testler
+
+| Katman | Dosya | Kapsam |
+|--------|-------|--------|
+| Birim | `backend/test/security.test.js` | Rate limiter (limiter'lar arası izolasyon), body doğrulama, hata sızdırmama |
+| SQL | `backend/test/matchmaking.sql.test.js` | `database/schema.sql` PGlite'ta: eşleştirme, bayat kuyruk, özel oda, iptal, istatistik, ekonomi RPC'leri, idempotent şema |
+| Entegrasyon | `backend/test/api.*.test.js` | Gerçek Express uygulaması + SSE: auth, hesap silme, arkadaşlar, mesajlaşma, lobi, çevrimiçi oyun, mağaza, kayıt |
+| Smoke / E2E | `backend/test/smoke.e2e.test.js` | Kayıt → arkadaşlık → mesaj → davet → özel oda → canlı hamleler → maç sonu |
+| Frontend birim | `frontend/test/*.test.js` | Oyun kuralları, MultiplayerService, ApiService, sosyal yardımcılar, analitik gizliliği |
+| Build smoke | `frontend/test/build.smoke.test.js` | Her sayfanın title/description/canonical/OG, noindex, robots, sitemap, 404 |
+
+Yeni bir özellik eklerken ilgili `api.*.test.js` dosyasına senaryo eklemek yeterlidir; test ortamı (`backend/test/support`) şemayı her dosya için sıfırdan kurar.
+
 ## Bilinen Eksikler
 
 - Multiplayer SSE akışı tek backend instance ile sınırlıdır; çoklu instance için ortak event bus gerekir.
 - Oyun state'i hâlâ istemciden gelir; tam server-authoritative command modeline geçilmelidir.
 - Şifre sıfırlama token'ları hash'lenerek `password_reset_tokens` tablosunda saklanır ve tek kullanımlıdır.
-- Frontend sayfalarında ortak layout/hook refactor'ı yapılabilir.
+- `frontend/public/assets/players/*.glb` dosyaları ~30 MB'tır (yalnızca `/showcase` sayfasında yüklenir); dokular sıkıştırılarak (ör. `gltf-transform` ile WebP doku) küçültülmelidir.
+- Google Fonts üçüncü taraf sunucudan yüklenir; tam KVKK/GDPR uyumu için fontlar self-host edilebilir.
 - `frontend/out` build çıktısı ignore edilir; dağıtım için build çıktısı CI/CD tarafında üretilmelidir.
 
 ## Lisans

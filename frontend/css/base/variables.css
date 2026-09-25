@@ -2,7 +2,7 @@
    CSS DEĞİŞKENLERİ — Renk, font, spacing token'ları
    ========================================== */
 
-@import url('https://fonts.googleapis.com/css2?family=Rajdhani:wght@600;700;800&family=Outfit:wght@500;600;700;800&family=Plus+Jakarta+Sans:wght@400;500;600;700&display=swap');
+/* Web fontları src/app/layout.jsx içinde preconnect + <link> ile paralel yüklenir. */
 
 :root {
   --gold: #f5d061;

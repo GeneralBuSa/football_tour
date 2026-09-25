@@ -3,7 +3,7 @@
 // ==========================================
 
 import {
-  PLAYERS, currentPlayer, turnCount, gameLog, gameTime, timerId,
+  PLAYERS, currentPlayer, turnCount, gameLog, gameTime, timerId, gameEnded,
   setPlayers, setCurrentPlayer, setTurnCount, setGameLog, setGameTime,
   setTimerId, setTutorialText, setDiceRolled, setGameEnded
 } from '../engine/state.js';
@@ -14,6 +14,8 @@ import { finishGame, renderPlayers } from '../engine/player.js';
 import { updateStadiums3D } from '../3d/stadiums.js';
 import gameService from '../../services/GameService.js';
 import { applyGameSnapshot, getGameSnapshot } from '../engine/snapshot.js';
+import multiplayerService from '../../services/MultiplayerService.js';
+import apiService from '../../services/ApiService.js';
 
 // Zaman sayacı
 export function startTimer() {
@@ -45,12 +47,13 @@ export function openSettings() {
 // Steam başlatma
 export async function initSteam() {
   const env = gameService.getEnvironment();
+  const statusEl = document.getElementById('steam-status');
   if (env.isSteamConnected) {
     PLAYERS[0].name = env.steamName;
-    document.getElementById('steam-status').textContent = `Steam: Çevrimiçi (${env.steamName})`;
+    if (statusEl) statusEl.textContent = `Steam: Çevrimiçi (${env.steamName})`;
     renderPlayers();
-  } else {
-    document.getElementById('steam-status').textContent = 'Steam: Çevrimdışı Mod';
+  } else if (statusEl) {
+    statusEl.textContent = 'Steam: Çevrimdışı Mod';
   }
 }
 
@@ -168,6 +171,19 @@ export function exitToMainMenu() {
   if (timerId) {
     clearInterval(timerId);
     setTimerId(null);
+  }
+
+  // Çevrimiçi maçtan çıkarken canlı bağlantı kapatılır ve lobi kaydı temizlenir;
+  // henüz hamle yapılmamışsa rakibe maçın iptal edildiği bildirilir.
+  if (multiplayerService.sessionId) {
+    const sessionId = multiplayerService.sessionId;
+    const started = multiplayerService.version !== null;
+    multiplayerService.stop();
+    if (started && !gameEnded) {
+      // Başlamış maçı terk etmek hükmen yenilgidir; rakibe canlı olarak bildirilir.
+      apiService.finishMultiplayerSession(sessionId, getGameSnapshot(), { reason: 'forfeit' }).catch(() => {});
+    }
+    apiService.leaveLobby().catch(() => {});
   }
 
   setGameTime(1800);

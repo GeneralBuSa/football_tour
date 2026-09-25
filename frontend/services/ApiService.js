@@ -4,6 +4,19 @@
 // ==========================================
 
 const API_BASE = process.env.NEXT_PUBLIC_API_BASE_URL || 'http://localhost:8000/api';
+const REQUEST_TIMEOUT_MS = 15000;
+
+// Kullanıcıya gösterilecek, ne olduğunu ve ne yapılabileceğini anlatan hata metinleri.
+// Sunucu kendi anlaşılır mesajını döndürdüyse o tercih edilir; 5xx iç detayları gösterilmez.
+function describeHttpError(status, serverMessage) {
+  if (status >= 500) return 'Sunucuda geçici bir sorun oluştu. Birkaç saniye sonra tekrar dene.';
+  if (serverMessage) return serverMessage;
+  if (status === 401) return 'Oturumunun süresi doldu. Lütfen tekrar giriş yap.';
+  if (status === 403) return 'Bu işlem için yetkin yok.';
+  if (status === 404) return 'İstenen kayıt bulunamadı.';
+  if (status === 429) return 'Çok fazla istek gönderildi. Lütfen biraz bekleyip tekrar dene.';
+  return `İstek tamamlanamadı (${status}). Lütfen tekrar dene.`;
+}
 
 class ApiService {
   constructor() {
@@ -23,7 +36,11 @@ class ApiService {
   // Dinamik User Getter
   get user() {
     if (!this._user && typeof window !== 'undefined') {
-      this._user = JSON.parse(localStorage.getItem('ft26_user') || 'null');
+      try {
+        this._user = JSON.parse(localStorage.getItem('ft26_user') || 'null');
+      } catch {
+        this._user = null;
+      }
     }
     return this._user;
   }
@@ -81,60 +98,71 @@ class ApiService {
     return headers;
   }
 
-  // GET isteği
+  // Ortak HTTP isteği. Hata durumunda her zaman { error, status } nesnesi döner.
+  async _request(method, endpoint, data) {
+    let res;
+    // Yavaş/kopuk bağlantıda isteğin sonsuza kadar asılı kalmasını önler.
+    const controller = typeof AbortController !== 'undefined' ? new AbortController() : null;
+    const timeout = controller ? setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS) : null;
+    try {
+      res = await fetch(`${API_BASE}${endpoint}`, {
+        method,
+        headers: this._headers(data !== undefined),
+        body: data === undefined ? undefined : JSON.stringify(data),
+        signal: controller?.signal
+      });
+    } catch (err) {
+      console.warn(`[ApiService] ${method} ${endpoint} hatası:`, err);
+      const timedOut = err?.name === 'AbortError';
+      return {
+        error: timedOut
+          ? 'Sunucu zamanında yanıt vermedi. Bağlantını kontrol edip tekrar dene.'
+          : 'Sunucuya bağlanılamadı. İnternet bağlantını kontrol edip tekrar dene.',
+        status: 0,
+        network: true
+      };
+    } finally {
+      if (timeout) clearTimeout(timeout);
+    }
+
+    let resData = null;
+    try {
+      resData = await res.json();
+    } catch {
+      resData = null;
+    }
+
+    // Yalnızca 401 oturumu sonlandırır. Eskiden hata metninde "token" geçen her
+    // yanıt (ör. geçersiz şifre sıfırlama token'ı) kullanıcıyı çıkış yaptırıyordu.
+    if (res.status === 401 && this.token) {
+      this.clearToken();
+      if (typeof window !== 'undefined') {
+        window.dispatchEvent(new CustomEvent('ft26:session-expired'));
+      }
+    }
+
+    if (!res.ok) {
+      const serverMessage = resData && typeof resData === 'object' && typeof resData.error === 'string' ? resData.error : '';
+      const error = describeHttpError(res.status, serverMessage);
+      return { ...(resData && typeof resData === 'object' && !Array.isArray(resData) ? resData : {}), error, status: res.status };
+    }
+    return resData;
+  }
+
   async _get(endpoint) {
-    try {
-      const res = await fetch(`${API_BASE}${endpoint}`, {
-        method: 'GET',
-        headers: this._headers()
-      });
-      const data = await res.json();
-      if (res.status === 401 || (data && data.error && data.error.includes('token'))) {
-        this.clearToken();
-      }
-      return data;
-    } catch (err) {
-      console.warn(`[ApiService] GET ${endpoint} hatası:`, err);
-      return { error: 'Bağlantı hatası. Sunucu çalışıyor mu?' };
-    }
+    return this._request('GET', endpoint);
   }
 
-  // POST isteği
   async _post(endpoint, data) {
-    try {
-      const res = await fetch(`${API_BASE}${endpoint}`, {
-        method: 'POST',
-        headers: this._headers(),
-        body: JSON.stringify(data)
-      });
-      const resData = await res.json();
-      if (res.status === 401 || (resData && resData.error && resData.error.includes('token'))) {
-        this.clearToken();
-      }
-      return resData;
-    } catch (err) {
-      console.warn(`[ApiService] POST ${endpoint} hatası:`, err);
-      return { error: 'Bağlantı hatası. Sunucu çalışıyor mu?' };
-    }
+    return this._request('POST', endpoint, data ?? {});
   }
 
-  // PUT isteği
   async _put(endpoint, data) {
-    try {
-      const res = await fetch(`${API_BASE}${endpoint}`, {
-        method: 'PUT',
-        headers: this._headers(),
-        body: JSON.stringify(data)
-      });
-      const resData = await res.json();
-      if (res.status === 401 || (resData && resData.error && resData.error.includes('token'))) {
-        this.clearToken();
-      }
-      return resData;
-    } catch (err) {
-      console.warn(`[ApiService] PUT ${endpoint} hatası:`, err);
-      return { error: 'Bağlantı hatası. Sunucu çalışıyor mu?' };
-    }
+    return this._request('PUT', endpoint, data ?? {});
+  }
+
+  async _delete(endpoint) {
+    return this._request('DELETE', endpoint);
   }
 
   // ==========================================
@@ -181,6 +209,11 @@ class ApiService {
       }
     }
     return res;
+  }
+
+  // Hesabı kalıcı olarak sil (şifre ile yeniden doğrulama gerekir)
+  async deleteAccount(password) {
+    return await this._request('DELETE', '/auth/account', { password });
   }
 
   // Çıkış yap
@@ -250,6 +283,22 @@ class ApiService {
 
   async getPlayerCatalog() {
     return await this._get('/store/players');
+  }
+
+  async redeemPromoCode(code) {
+    if (!this.getUser()) return { error: 'Promosyon kodu kullanmak için giriş yapın.' };
+    return await this._post('/promo/redeem', { code });
+  }
+
+  // Oyunda kullanılacak karakteri (3D model) seçer; null varsayılana döndürür.
+  async selectCharacter(characterKey) {
+    if (!this.getUser()) return { error: 'Giriş yapılmadı' };
+    const res = await this._put('/store/characters/selected', { character_key: characterKey });
+    if (res && !res.error) {
+      const user = this.getUser();
+      if (user) this.setUser({ ...user, selected_character: res.selected_character });
+    }
+    return res;
   }
 
   async claimStarterCharacter(characterKey) {
@@ -334,6 +383,46 @@ class ApiService {
     return await this._post('/friends/accept', { friend_id: friendId });
   }
 
+  async rejectFriendRequest(friendId) {
+    if (!this.getUser()) return { error: 'Giriş yapılmadı' };
+    return await this._post('/friends/reject', { friend_id: friendId });
+  }
+
+  // Arkadaşı çıkarır veya gönderilmiş isteği geri çeker
+  async removeFriend(friendId) {
+    if (!this.getUser()) return { error: 'Giriş yapılmadı' };
+    return await this._delete(`/friends/${encodeURIComponent(friendId)}`);
+  }
+
+  // ==========================================
+  // MESAJLAŞMA API
+  // ==========================================
+
+  async getConversation(friendId, limit = 50) {
+    if (!this.getUser()) return { error: 'Giriş yapılmadı' };
+    return await this._get(`/messages/${encodeURIComponent(friendId)}?limit=${limit}`);
+  }
+
+  async sendMessage(friendId, body) {
+    if (!this.getUser()) return { error: 'Giriş yapılmadı' };
+    return await this._post('/messages', { friend_id: friendId, body });
+  }
+
+  async sendGameInvite(friendId) {
+    if (!this.getUser()) return { error: 'Giriş yapılmadı' };
+    return await this._post('/messages/invite', { friend_id: friendId });
+  }
+
+  async getUnreadCounts() {
+    if (!this.getUser()) return { error: 'Giriş yapılmadı' };
+    return await this._get('/messages/unread');
+  }
+
+  getMessageStreamUrl() {
+    const token = this.token;
+    return token ? `${API_BASE}/messages/stream?token=${encodeURIComponent(token)}` : null;
+  }
+
   // ==========================================
   // CLOUD SAVE API
   // ==========================================
@@ -385,5 +474,6 @@ class ApiService {
 
 // Singleton olarak dışarıya ver
 const apiService = new ApiService();
+export { ApiService, API_BASE, describeHttpError };
 export default apiService;
 

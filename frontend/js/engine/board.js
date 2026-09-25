@@ -4,7 +4,16 @@
 
 import { CITIES, SPECIAL_CELLS } from '../data/cities.js';
 import { boardLayout } from '../data/boardLayout.js';
-import { PLAYERS, gameTime, currentTutorialText } from './state.js';
+import { PLAYERS } from './state.js';
+
+// Uzun şehir adları (ör. Rotterdam, Amsterdam, Eindhoven) hücreden taşmasın diye
+// ada göre yazı boyutu sınıfı seçilir.
+export function nameSizeClass(name) {
+  const length = String(name).length;
+  if (length >= 10) return 'name-xl';
+  if (length >= 8) return 'name-lg';
+  return '';
+}
 
 // Tahta hücrelerini hesapla
 function getBoardCells() {
@@ -48,10 +57,11 @@ function getBoardCells() {
       cells.push({
         type: 'city',
         cls: 'cell cell-city ' + sideClass,
+        label: `${c.name}, ${c.league}, fiyat ₺${c.price.toLocaleString('tr-TR')}`,
         html: `
           <div class="owner-color-bar" style="background:${c.color}"></div>
           <div class="cell-content">
-            <span class="city-name">${c.name}</span>
+            <span class="city-name ${nameSizeClass(c.name)}">${c.name}</span>
             <span class="city-price">₺${(c.price / 1000).toFixed(0)}K</span>
           </div>
         `,
@@ -98,6 +108,11 @@ export function buildBoard(openCityModalFn) {
         if (idx !== null) {
           const cd = cells[idx];
           el.className = 'cell ' + cd.cls;
+          el.dataset.cellIndex = idx;
+          if (cd.label) {
+            el.title = cd.label;
+            el.setAttribute('aria-label', cd.label);
+          }
           el.style.background = cd.bg || '';
           if (cd.borderColor) el.style.borderColor = cd.borderColor;
           el.innerHTML = cd.html;
@@ -126,15 +141,13 @@ export function buildBoard(openCityModalFn) {
         el.style.gridColumn = '2 / 9';
         el.style.gridRow = '2 / 9';
 
-        const min = String(Math.floor(gameTime / 60)).padStart(2, '0');
-        const sec = String(gameTime % 60).padStart(2, '0');
-
+        // Saha: çizgiler CSS ile; sayaç ve olay kartı artık ekran üstündeki HUD'da.
         el.innerHTML = `
-          <div class="center-hud">
-            <div class="timer-box" id="timer-val">${min}:${sec}</div>
-            <div class="tutorial-card">
-              <div class="tutorial-text" id="tutorial-text">${currentTutorialText}</div>
-            </div>
+          <div class="pitch-markings" aria-hidden="true">
+            <span class="pitch-box pitch-box-left"></span>
+            <span class="pitch-box pitch-box-right"></span>
+            <span class="pitch-circle"></span>
+            <img class="pitch-logo" src="/assets/logo.webp" alt="" width="120" height="120" />
           </div>
         `;
         grid.appendChild(el);

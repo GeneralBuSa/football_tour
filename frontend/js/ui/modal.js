@@ -5,6 +5,7 @@
 import { CITIES } from '../data/cities.js';
 import { PLAYERS, currentPlayer } from '../engine/state.js';
 import gameService from '../../services/GameService.js';
+import { escapeHtml } from '../utils/html.js';
 
 // Modal kapatma
 export function closeModal(id) {
@@ -16,6 +17,14 @@ export function closeModal(id) {
       el.remove();
     }
   }
+}
+
+// Ülke bayrağı görseli. Windows bayrak emojilerini "PT", "TR" gibi harflerle çizdiği için
+// emoji yerine SVG kullanılır.
+export function flagImage(city, width = 28) {
+  if (!city?.country) return '';
+  const height = Math.round((width * 2) / 3);
+  return `<img class="flag-img" src="/assets/flags/${city.country}.svg" alt="${city.league} bayrağı" width="${width}" height="${height}" />`;
 }
 
 // Şehir bilgi modalı
@@ -32,24 +41,24 @@ export function openCityModal(cIdx, canBuy = false) {
   div.className = 'modal-backdrop';
   div.id = 'city-modal';
   div.innerHTML = `
-    <div class="modal">
+    <div class="modal city-modal" role="dialog" aria-modal="true" aria-labelledby="city-modal-title">
       <div class="modal-head">
-        <div style="display:flex;align-items:center;justify-content:center;gap:8px">
-          <span style="font-size:22px">${c.flag}</span>
+        <div class="city-modal-title">
+          ${flagImage(c, 36)}
           <div>
-            <div class="modal-city">${c.name}</div>
+            <div class="modal-city" id="city-modal-title">${c.name}</div>
             <div class="modal-league">${c.league}</div>
           </div>
         </div>
       </div>
       <div class="modal-body">
         <div class="modal-stats-grid">
-          <div class="modal-mini-stat"><div class="modal-mini-label">Fiyat</div><div class="modal-mini-val">₺${c.price.toLocaleString()}</div></div>
-          <div class="modal-mini-stat"><div class="modal-mini-label">Kira</div><div class="modal-mini-val">₺${c.rent}</div></div>
+          <div class="modal-mini-stat"><div class="modal-mini-label">Fiyat</div><div class="modal-mini-val">₺${c.price.toLocaleString('tr-TR')}</div></div>
+          <div class="modal-mini-stat"><div class="modal-mini-label">Kira</div><div class="modal-mini-val">₺${c.rent.toLocaleString('tr-TR')}</div></div>
           <div class="modal-mini-stat"><div class="modal-mini-label">Stadyum</div><div class="modal-mini-val">${stadLevel}/3</div></div>
           <div class="modal-mini-stat"><div class="modal-mini-label">Grup</div><div class="modal-mini-val" style="font-size:10px">${c.league.split(' ')[0]}</div></div>
         </div>
-        ${owner ? `<div style="font-size:11px;text-align:center;color:${isMine ? '#27ae60' : '#e74c3c'}">${isMine ? '✅ Senin mülkün' : '🔴 ' + owner.name + ' bu şehre sahip'}</div>` : '<div style="font-size:11px;text-align:center;color:#7f8c8d">🏙️ Sahipsiz şehir</div>'}
+        ${owner ? `<div style="font-size:11px;text-align:center;color:${isMine ? '#27ae60' : '#e74c3c'}">${isMine ? '✅ Senin mülkün' : '🔴 ' + escapeHtml(owner.name) + ' bu şehre sahip'}</div>` : '<div style="font-size:11px;text-align:center;color:#7f8c8d">🏙️ Sahipsiz şehir</div>'}
       </div>
       <div class="modal-btns">
         ${canBuy && !owner && currentP.money >= c.price ? `<button class="mbtn mbtn-buy" onclick="window.buyCity(${cIdx})">Satın Al ₺${c.price.toLocaleString()}</button>` : ''}

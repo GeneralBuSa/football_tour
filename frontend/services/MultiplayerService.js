@@ -1,21 +1,30 @@
 import apiService from './ApiService.js';
 
 const API_BASE = process.env.NEXT_PUBLIC_API_BASE_URL || 'http://localhost:8000/api';
+const IGNORED_EVENTS = new Set(['connected', 'heartbeat', 'player_joined']);
 
-class MultiplayerService {
-  constructor() {
+export class MultiplayerService {
+  constructor({ api = apiService, apiBase = API_BASE } = {}) {
+    this._api = api;
+    this._apiBase = apiBase;
     this._sessionId = null;
     this._events = null;
     this._applyingRemoteState = false;
     this._onState = null;
+    this._onClosed = null;
     this._version = null;
     this._localPlayerIndex = null;
     this._reconnectAttempts = 0;
     this._reconnectTimeout = null;
+    this._syncChain = Promise.resolve();
   }
 
   get sessionId() {
     return this._sessionId;
+  }
+
+  get version() {
+    return this._version;
   }
 
   isApplyingRemoteState() {
@@ -26,10 +35,18 @@ class MultiplayerService {
     this._applyingRemoteState = value;
   }
 
-  async start(sessionId, onState, localPlayerIndex) {
+  // Oturum bilgisi gelene kadar yerel oyuncunun hamle yapmasını engeller.
+  prepare(sessionId) {
+    this.stop();
+    this._sessionId = sessionId;
+    this._localPlayerIndex = null;
+  }
+
+  async start(sessionId, onState, localPlayerIndex, { onClosed } = {}) {
     this.stop();
     this._sessionId = sessionId;
     this._onState = onState;
+    this._onClosed = typeof onClosed === 'function' ? onClosed : null;
     this._localPlayerIndex = Number.isInteger(localPlayerIndex) ? localPlayerIndex : null;
     this._reconnectAttempts = 0;
 
@@ -40,60 +57,114 @@ class MultiplayerService {
     return !this._sessionId || this._localPlayerIndex === currentPlayerIndex;
   }
 
+  _localUserId() {
+    return this._api.getUser?.()?.id || null;
+  }
+
+  _applyRemoteState(stateData) {
+    if (typeof this._onState !== 'function') return;
+    this._applyingRemoteState = true;
+    try {
+      this._onState(stateData);
+    } finally {
+      this._applyingRemoteState = false;
+    }
+  }
+
+  _rememberVersion(version) {
+    // Postgres zaman damgaları aynı biçimde döner; sözlük sırası kronolojik sıradır.
+    if (version && (!this._version || String(version) > String(this._version))) {
+      this._version = version;
+    }
+  }
+
+  // Sunucudaki son durumu çekip uygular (yeniden bağlanma ve sürüm çakışması sonrası).
+  async resync() {
+    if (!this._sessionId) return null;
+    const session = await this._api.getMultiplayerSession(this._sessionId);
+    if (!session || session.error) return null;
+
+    if (session.status === 'cancelled' || session.status === 'finished') {
+      this._notifyClosed({ reason: session.status, state_data: session.state_data, result_data: session.result_data });
+      return session;
+    }
+    if (session.state_data && Object.keys(session.state_data).length > 0) {
+      this._version = session.updated_at;
+      this._applyRemoteState(session.state_data);
+    }
+    return session;
+  }
+
+  _notifyClosed(details) {
+    const callback = this._onClosed;
+    this._onClosed = null;
+    if (typeof callback === 'function') callback(details);
+  }
+
+  handleEvent(payload) {
+    if (!payload || IGNORED_EVENTS.has(payload.type)) return;
+
+    if (payload.type === 'cancelled') {
+      this._notifyClosed({ reason: 'cancelled' });
+      return;
+    }
+
+    const fromSelf = payload.user_id && payload.user_id === this._localUserId();
+
+    if (payload.type === 'finished') {
+      if (!fromSelf) {
+        this._notifyClosed({ reason: 'finished', state_data: payload.state_data, result_data: payload.result_data });
+      }
+      return;
+    }
+
+    if (!payload.state_data) return;
+    this._rememberVersion(payload.version);
+    // Kendi gönderdiğimiz hamlenin yankısını tekrar uygulamak zar butonunu yeniden açardı.
+    if (fromSelf) return;
+    this._applyRemoteState(payload.state_data);
+  }
+
   async _connect() {
     const sessionId = this._sessionId;
-    const token = apiService.token;
-    if (!sessionId || !token || typeof window === 'undefined') return;
+    const token = this._api.token;
+    if (!sessionId || !token || typeof EventSource === 'undefined') return;
 
-    // 1. Yeniden bağlanırken son durumu çek ve eşle
     try {
-      const session = await apiService.getMultiplayerSession(sessionId);
-      if (session && session.state_data && Object.keys(session.state_data).length > 0) {
-        this._version = session.updated_at;
-        if (typeof this._onState === 'function') {
-          this._onState(session.state_data);
-        }
-      }
+      await this.resync();
     } catch (e) {
       console.warn('[MultiplayerService] son durum çekilemedi', e);
     }
+    if (this._sessionId !== sessionId) return;
 
-    // 2. EventSource bağlantısını aç
-    const url = `${API_BASE}/multiplayer/sessions/${sessionId}/events?token=${encodeURIComponent(token)}`;
+    const url = `${this._apiBase}/multiplayer/sessions/${sessionId}/events?token=${encodeURIComponent(token)}`;
     if (this._events) this._events.close();
 
     this._events = new EventSource(url);
 
     this._events.onmessage = event => {
       try {
-        const payload = JSON.parse(event.data);
-        if (payload.type === 'state_update' && payload.state_data && typeof this._onState === 'function') {
-          this._version = payload.version; // En güncel sürümü sakla
-          this._onState(payload.state_data);
-        }
+        this.handleEvent(JSON.parse(event.data));
       } catch (e) {
         console.warn('[MultiplayerService] event parse hatası', e);
       }
     };
 
     this._events.onopen = () => {
-      this._reconnectAttempts = 0; // Başarılı bağlantıda denemeleri sıfırla
+      this._reconnectAttempts = 0;
     };
 
     this._events.onerror = () => {
       console.warn('[MultiplayerService] bağlantı koptu, yeniden bağlanılıyor...');
-      this._events.close();
+      if (this._events) this._events.close();
       this._events = null;
 
-      // Exponential backoff reconnect (Max 16sn)
       const backoff = Math.min(1000 * Math.pow(2, this._reconnectAttempts), 16000);
       this._reconnectAttempts++;
 
       if (this._reconnectTimeout) clearTimeout(this._reconnectTimeout);
       this._reconnectTimeout = setTimeout(() => {
-        if (this._sessionId) {
-          this._connect();
-        }
+        if (this._sessionId === sessionId) this._connect();
       }, backoff);
     };
   }
@@ -105,19 +176,35 @@ class MultiplayerService {
     this._reconnectTimeout = null;
     this._sessionId = null;
     this._onState = null;
+    this._onClosed = null;
     this._version = null;
     this._localPlayerIndex = null;
     this._reconnectAttempts = 0;
     this._applyingRemoteState = false;
+    this._syncChain = Promise.resolve();
   }
 
-  async syncState(stateData, eventType = 'state_update') {
-    if (!this._sessionId || this._applyingRemoteState) return { skipped: true };
-    const res = await apiService.updateMultiplayerState(this._sessionId, stateData, eventType, this._version);
-    if (res && res.updated_at) {
-      this._version = res.updated_at; // Kendi yaptığımız güncellemeden dönen sürümü al
-    }
-    return res;
+  // Hamleler sırayla gönderilir; böylece her istek bir öncekinin döndürdüğü sürümü taşır.
+  syncState(stateData, eventType = 'state_update') {
+    if (!this._sessionId || this._applyingRemoteState) return Promise.resolve({ skipped: true });
+    const sessionId = this._sessionId;
+    const snapshot = JSON.parse(JSON.stringify(stateData));
+
+    const run = async () => {
+      if (this._sessionId !== sessionId) return { skipped: true };
+      const res = await this._api.updateMultiplayerState(sessionId, snapshot, eventType, this._version);
+      if (res && res.updated_at) {
+        this._rememberVersion(res.updated_at);
+      } else if (res && res.db_version) {
+        // Başka bir hamle araya girdi: sunucudaki güncel durumu uygula.
+        await this.resync();
+      }
+      return res;
+    };
+
+    const result = this._syncChain.then(run, run);
+    this._syncChain = result.catch(() => {});
+    return result;
   }
 }
 

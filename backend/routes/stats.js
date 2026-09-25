@@ -1,6 +1,7 @@
 import express from 'express';
 import { supabase } from '../db.js';
 import { createAuthMiddleware, requireSameUser } from '../middleware/auth.js';
+import { sendDbError } from '../middleware/errors.js';
 
 const router = express.Router();
 const authenticate = createAuthMiddleware();
@@ -14,7 +15,7 @@ router.get('/', async (req, res) => {
       .order('wins', { ascending: false })
       .limit(10);
 
-    if (error) return res.status(400).json({ error: error.message });
+    if (error) return sendDbError(res, error);
     
     // UI'ın beklediği formata dönüştür
     const formattedData = data.map(item => ({

@@ -17,56 +17,60 @@ const NAV_ITEMS_RIGHT = [
 ];
 
 export default function TopNav({ activePage = '', stats = {}, t = {} }) {
-  const navigate = (href) => {
-    window.location.href = href;
-  };
-
   return (
-    <div className="menu-top-nav" style={{position: 'fixed', top: '0', left: '0', width: '100%', zIndex: '10'}}>
+    <nav className="menu-top-nav" aria-label="Ana menü" style={{position: 'fixed', top: '0', left: '0', width: '100%', zIndex: '10'}}>
       <div className="top-nav-left">
-        <div className="menu-logo" onClick={() => navigate('/')} style={{cursor: 'pointer'}}>
-          <img src="/assets/logo.png" alt="FT26 Logo" className="logo-img" />
-        </div>
+        <a className="menu-logo" href="/">
+          <img src="/assets/logo.webp" alt="Football Tour Simulator FT26" className="logo-img" width="60" height="60" />
+        </a>
       </div>
       <div className="top-nav-center">
         <div className="nav-icons-group left">
           {NAV_ITEMS_LEFT.map(item => (
-            <div
+            <a
               key={item.key}
+              href={item.href}
               className={`nav-item-icon${activePage === item.key ? ' active' : ''}`}
               title={t[item.titleKey] || item.key}
-              onClick={() => navigate(item.href)}
+              aria-label={t[item.titleKey] || item.key}
+              aria-current={activePage === item.key ? 'page' : undefined}
+              style={{ textDecoration: 'none' }}
             >
               {item.icon}
-            </div>
+            </a>
           ))}
         </div>
-        <button className="btn-play-tactical" onClick={() => navigate('/?play=true')}>
+        <a className="btn-play-tactical" href="/?play=true" style={{ textDecoration: 'none' }}>
           {t.play || 'OYNA'}
-        </button>
+        </a>
         <div className="nav-icons-group right">
           {NAV_ITEMS_RIGHT.map(item => (
-            <div
+            <a
               key={item.key}
+              href={item.href}
               className={`nav-item-icon${activePage === item.key ? ' active' : ''}`}
               title={t[item.titleKey] || item.key}
-              onClick={() => navigate(item.href)}
+              aria-label={t[item.titleKey] || item.key}
+              aria-current={activePage === item.key ? 'page' : undefined}
+              style={{ textDecoration: 'none' }}
             >
               {item.icon}
-            </div>
+            </a>
           ))}
         </div>
       </div>
       <div className="top-nav-right">
-        <div className="user-stats">
-          <div className="stat-item" title={t.earnings || 'Kazanç'}>
-            <span style={{display: "flex", alignItems: "center", justifyContent: "center", height: "100%"}}>🪙</span>
-            <span style={{display: "flex", alignItems: "center", position: "relative", top: "0.5px"}}>
-              ₺{(stats.total_earnings || 0).toLocaleString()}
-            </span>
+        {typeof stats?.total_earnings === 'number' && (
+          <div className="user-stats">
+            <div className="stat-item" title={t.earnings || 'Kazanç'}>
+              <span aria-hidden="true" style={{display: "flex", alignItems: "center", justifyContent: "center", height: "100%"}}>🪙</span>
+              <span style={{display: "flex", alignItems: "center", position: "relative", top: "0.5px"}}>
+                ₺{stats.total_earnings.toLocaleString()}
+              </span>
+            </div>
           </div>
-        </div>
+        )}
       </div>
-    </div>
+    </nav>
   );
 }

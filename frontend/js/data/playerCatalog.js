@@ -11,7 +11,7 @@ export const PLAYER_CATALOG = [
     priceUsdCents: 500,
     archetype: 'playmaker',
     color: '#29b6f6',
-    refImage: '/docs/ft26-architect.png',
+    refImage: '/docs/ft26-architect.webp',
     modelPath: '/assets/players/architect.glb'
   },
   {
@@ -21,7 +21,7 @@ export const PLAYER_CATALOG = [
     priceUsdCents: 500,
     archetype: 'finisher',
     color: '#d92c4c',
-    refImage: '/docs/ft26-king.png',
+    refImage: '/docs/ft26-king.webp',
     modelPath: '/assets/players/king.glb'
   },
   {
@@ -31,7 +31,7 @@ export const PLAYER_CATALOG = [
     priceUsdCents: 300,
     archetype: 'target',
     color: '#a52b36',
-    refImage: '/docs/ft26-viking.png',
+    refImage: '/docs/ft26-viking.webp',
     modelPath: '/assets/players/viking.glb',
     starterEligible: true
   },
@@ -42,7 +42,7 @@ export const PLAYER_CATALOG = [
     priceUsdCents: 300,
     archetype: 'speedster',
     color: '#253b78',
-    refImage: '/docs/ft26-rocket.png',
+    refImage: '/docs/ft26-rocket.webp',
     modelPath: '/assets/players/rocket.glb',
     starterEligible: true
   },
@@ -53,7 +53,7 @@ export const PLAYER_CATALOG = [
     priceUsdCents: 300,
     archetype: 'dribbler',
     color: '#f2c21b',
-    refImage: '/docs/ft26-wizard.png',
+    refImage: '/docs/ft26-wizard.webp',
     modelPath: '/assets/players/wizard.glb'
   }
 ];

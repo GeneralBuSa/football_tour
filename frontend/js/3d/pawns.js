@@ -4,7 +4,6 @@
 
 import * as THREE from 'three';
 import { PLAYERS } from '../engine/state.js';
-import { camera } from './scene.js';
 
 const CHARACTER_STYLES = {
   "The Architect": { skin: 0xb97852, hair: 0x241810, body: 0.92, hairStyle: "side", accent: 0xffffff },
@@ -89,81 +88,241 @@ export function createCharacter(p) {
   return group;
 }
 
-// Özgün, düşük poligonlu karakter piyonları oluştur.
-export function create3DPlayers(scene) {
-  PLAYERS.forEach((p, index) => {
-    const group = createCharacter(p);
-    const startPos = getPlayer3DPosition(index, p.pos);
-    group.position.set(startPos.x, startPos.y, startPos.z);
-    scene.add(group);
-    p.threeGroup = group;
-    p.target3DPosition = { x: startPos.x, y: startPos.y, z: startPos.z };
+// ==========================================
+// OYUNCU MODELLERİ (Meshy GLB)
+// ==========================================
+// Oyun, tasarlanan futbolcu modellerini kullanır. Orijinal dosyalar (~30 MB, 3M üçgen)
+// vitrin sayfası içindir; oyunda aynı modellerin optimize kopyaları
+// (assets/players/game/*.glb, ~400 KB, ~31K üçgen, 1024px WebP doku, Draco) yüklenir.
+// Model gelene kadar (veya yüklenemezse) prosedürel yedek figür gösterilir.
+
+export const CHARACTER_KEYS = ['architect', 'king', 'rocket', 'viking', 'wizard'];
+const GAME_MODEL_PATH = key => `/assets/players/game/${key}.glb`;
+const PAWN_HEIGHT = 1.35; // tahta birimi (≈ 1.35 hücre genişliği)
+// Beklerken modeller izometrik kameraya doğru bakar.
+export const IDLE_FACING = -Math.PI / 4;
+
+const modelCache = new Map();
+let gltfLoaderPromise = null;
+
+function getLoader() {
+  if (!gltfLoaderPromise) {
+    gltfLoaderPromise = Promise.all([
+      import('three/examples/jsm/loaders/GLTFLoader.js'),
+      import('three/examples/jsm/loaders/DRACOLoader.js')
+    ]).then(([{ GLTFLoader }, { DRACOLoader }]) => {
+      const draco = new DRACOLoader();
+      draco.setDecoderPath('/draco/');
+      const loader = new GLTFLoader();
+      loader.setDRACOLoader(draco);
+      return loader;
+    });
+  }
+  return gltfLoaderPromise;
+}
+
+// Oyuncunun kullanacağı karakter: seçili karakter > isimden eşleşme > sıraya göre varsayılan.
+export function resolveCharacterKey(player, index = 0) {
+  if (player?.characterKey && CHARACTER_KEYS.includes(player.characterKey)) return player.characterKey;
+  const byName = String(player?.name || '').toLowerCase().replace(/^the\s+/, '');
+  if (CHARACTER_KEYS.includes(byName)) return byName;
+  return CHARACTER_KEYS[index % CHARACTER_KEYS.length];
+}
+
+// Modeli bir kez yükler, ayağı y=0'da ve yüksekliği PAWN_HEIGHT olacak şekilde normalleştirir.
+export function loadCharacterModel(key) {
+  if (!modelCache.has(key)) {
+    const promise = getLoader().then(loader => new Promise((resolve, reject) => {
+      loader.load(GAME_MODEL_PATH(key), gltf => {
+        const model = gltf.scene;
+        const box = new THREE.Box3().setFromObject(model);
+        const size = box.getSize(new THREE.Vector3());
+        const scale = PAWN_HEIGHT / Math.max(size.y, 0.001);
+        model.scale.setScalar(scale);
+        const fitted = new THREE.Box3().setFromObject(model);
+        const center = fitted.getCenter(new THREE.Vector3());
+        model.position.x -= center.x;
+        model.position.z -= center.z;
+        model.position.y -= fitted.min.y;
+        model.traverse(child => {
+          if (child.isMesh) {
+            child.frustumCulled = false;
+            if (child.material) child.material.side = THREE.FrontSide;
+          }
+        });
+        const holder = new THREE.Group();
+        holder.add(model);
+        resolve(holder);
+      }, undefined, reject);
+    }));
+    promise.catch(() => modelCache.delete(key));
+    modelCache.set(key, promise);
+  }
+  return modelCache.get(key);
+}
+
+// Oyuncunun rengindeki zemin halkası: aynı karakteri iki oyuncu seçse de ayırt edilir.
+function createBaseRing(color) {
+  const group = new THREE.Group();
+  const disc = new THREE.Mesh(
+    new THREE.CircleGeometry(0.34, 32),
+    new THREE.MeshBasicMaterial({ color, transparent: true, opacity: 0.35, depthWrite: false })
+  );
+  const ring = new THREE.Mesh(
+    new THREE.RingGeometry(0.3, 0.38, 40),
+    new THREE.MeshBasicMaterial({ color, transparent: true, opacity: 0.95, depthWrite: false })
+  );
+  [disc, ring].forEach(item => {
+    item.rotation.x = -Math.PI / 2;
+    item.position.y = 0.01;
+    group.add(item);
+  });
+  group.userData.isBaseRing = true;
+  return group;
+}
+
+function setPawnCharacter(wrapper, player, index) {
+  const key = resolveCharacterKey(player, index);
+  const color = player.color || '#29b6f6';
+  if (wrapper.userData.characterKey === key && wrapper.userData.color === color) return;
+  wrapper.userData.characterKey = key;
+  wrapper.userData.color = color;
+
+  // Önceki içeriği temizle, halkayı ve yedek figürü hemen göster.
+  wrapper.clear();
+  wrapper.add(createBaseRing(color));
+  const fallback = createCharacter({ ...player, name: player.name, color });
+  fallback.scale.setScalar(1.1);
+  fallback.position.y = 0.12;
+  wrapper.add(fallback);
+
+  loadCharacterModel(key).then(template => {
+    if (wrapper.userData.characterKey !== key) return; // bu arada karakter değişti
+    wrapper.remove(fallback);
+    const model = template.clone(true);
+    model.userData.isCharacterModel = true;
+    wrapper.add(model);
+  }).catch(error => {
+    console.warn(`[3D] ${key} modeli yüklenemedi, yedek figür kullanılıyor`, error);
   });
 }
 
-// Hücre 3D konumu hesaplama
-export function getCell3DPosition(cellIndex) {
-  const cameraY = (camera && camera.position) ? camera.position.y : 29.5;
-  const limit = cameraY * 0.155;
+// ==========================================
+// PİYON YÖNETİMİ
+// ==========================================
+// Piyonlar oyuncu sırasına (index) göre tutulur. PLAYERS dizisi yeni oyun başlatıldığında
+// (resetState) veya çevrimiçi durum senkronize edildiğinde yeni nesnelerle değiştiği için
+// piyon her senkronizasyonda ilgili oyuncu nesnesine yeniden bağlanır.
+const pawnGroups = [];
+let pawnParent = null;
 
-  let row, col;
-  if (cellIndex >= 0 && cellIndex <= 8) {
-    col = 0;
-    row = 8 - cellIndex;
-  } else if (cellIndex > 8 && cellIndex <= 16) {
-    row = 0;
-    col = cellIndex - 8;
-  } else if (cellIndex > 16 && cellIndex <= 24) {
-    col = 8;
-    row = cellIndex - 16;
-  } else {
-    row = 8;
-    col = 8 - (cellIndex - 24);
+function syncPawnsWithPlayers() {
+  if (!pawnParent) return;
+  PLAYERS.forEach((p, index) => {
+    let group = pawnGroups[index];
+    if (!group) {
+      group = new THREE.Group();
+      const startPos = getPlayer3DPosition(index, p.pos);
+      group.position.set(startPos.x, 0, startPos.z);
+      group.rotation.y = IDLE_FACING;
+      pawnParent.add(group);
+      pawnGroups[index] = group;
+    }
+    setPawnCharacter(group, p, index);
+    group.visible = true;
+    if (p.threeGroup !== group) {
+      Object.defineProperty(p, 'threeGroup', { value: group, writable: true, configurable: true, enumerable: false });
+    }
+  });
+  // Maçta olmayan oyuncuların piyonlarını gizle (ör. 2 kişilik çevrimiçi maç).
+  for (let index = PLAYERS.length; index < pawnGroups.length; index++) {
+    if (pawnGroups[index]) pawnGroups[index].visible = false;
   }
-
-  function getCoord(idx) {
-    const frUnit = (limit * 2) / 10;
-    if (idx === 0) return -limit + 0.75 * frUnit;
-    if (idx === 8) return -limit + 9.25 * frUnit;
-    return -limit + (idx + 1) * frUnit;
-  }
-
-  let x = getCoord(col);
-  let z = getCoord(row);
-
-  return { x: x, y: 0, z: z };
 }
 
-// Oyuncu offset pozisyonu (üst üste binmemesi için)
+export function create3DPlayers(parent) {
+  pawnParent = parent;
+  syncPawnsWithPlayers();
+  update3DPawnsTargetPositions();
+  // Modelleri arka planda önceden indir (oyun başladığında hazır olsun).
+  CHARACTER_KEYS.forEach(key => loadCharacterModel(key).catch(() => {}));
+}
+
+// ==========================================
+// HÜCRE KONUMLARI
+// ==========================================
+const BOARD_PX = 680;
+const UNIT_PX = 74; // scene.js BOARD_UNIT_PX ile aynı
+
+function cellGridPosition(cellIndex) {
+  if (cellIndex >= 0 && cellIndex <= 8) return { col: 0, row: 8 - cellIndex };
+  if (cellIndex > 8 && cellIndex <= 16) return { row: 0, col: cellIndex - 8 };
+  if (cellIndex > 16 && cellIndex <= 24) return { col: 8, row: cellIndex - 16 };
+  return { row: 8, col: 8 - (cellIndex - 24) };
+}
+
+// DOM'daki hücrenin tahta içindeki merkezini ölçer; tahta henüz yerleşmediyse
+// grid tanımından (1.5fr 7×1fr 1.5fr, 6px padding, 3px boşluk) hesaplar.
+export function getCell3DPosition(cellIndex) {
+  const el = typeof document !== 'undefined' ? document.querySelector(`[data-cell-index="${cellIndex}"]`) : null;
+  let cx;
+  let cy;
+  if (el && el.offsetWidth) {
+    cx = el.offsetLeft + el.offsetWidth / 2;
+    cy = el.offsetTop + el.offsetHeight / 2;
+  } else {
+    const { row, col } = cellGridPosition(cellIndex);
+    const fr = (BOARD_PX - 12 - 8 * 3) / 10;
+    const widths = [1.5, 1, 1, 1, 1, 1, 1, 1, 1.5].map(w => w * fr);
+    const start = i => 6 + widths.slice(0, i).reduce((a, b) => a + b, 0) + i * 3;
+    cx = start(col) + widths[col] / 2;
+    cy = start(row) + widths[row] / 2;
+  }
+  return { x: (cx - BOARD_PX / 2) / UNIT_PX, y: 0, z: (cy - BOARD_PX / 2) / UNIT_PX };
+}
+
+// Hücrenin sahaya (tahta merkezine) bakan yönü: kenar hücrelerinde uzun eksen boyunca.
+export function getCellInwardDirection(cellIndex) {
+  const { row, col } = cellGridPosition(cellIndex);
+  const x = col === 0 ? 1 : col === 8 ? -1 : 0;
+  const z = row === 0 ? 1 : row === 8 ? -1 : 0;
+  const length = Math.hypot(x, z) || 1;
+  return { x: x / length, z: z / length };
+}
+
+// Stadyum hücrenin iç yarısına, piyonlar dış yarısına yerleşir; üst üste binmezler.
+export function getStadium3DPosition(cellIndex) {
+  const pos = getCell3DPosition(cellIndex);
+  const inward = getCellInwardDirection(cellIndex);
+  return { x: pos.x + inward.x * 0.32, y: 0, z: pos.z + inward.z * 0.32 };
+}
+
+// Aynı hücredeki oyuncular üst üste binmesin diye küçük ofsetler.
+const PLAYER_OFFSETS = [
+  [-0.22, -0.18],
+  [0.22, 0.18],
+  [0.22, -0.18],
+  [-0.22, 0.18]
+];
+
 export function getPlayer3DPosition(playerIndex, cellIndex) {
   const pos = getCell3DPosition(cellIndex);
-  const offset = 0.25;
-  const verticalShift = 0.6;
-  const horizontalShift = 0.4;
-
-  if (playerIndex === 0) {
-    pos.x += offset - horizontalShift;
-    pos.z += offset + verticalShift;
-  } else if (playerIndex === 1) {
-    pos.x -= offset + horizontalShift;
-    pos.z += offset + verticalShift;
-  } else if (playerIndex === 2) {
-    pos.x += offset - horizontalShift;
-    pos.z -= offset - verticalShift;
-  } else if (playerIndex === 3) {
-    pos.x -= offset + horizontalShift;
-    pos.z -= offset - verticalShift;
+  const inward = getCellInwardDirection(cellIndex);
+  pos.x -= inward.x * 0.2;
+  pos.z -= inward.z * 0.2;
+  const [ox, oz] = PLAYER_OFFSETS[playerIndex % PLAYER_OFFSETS.length];
+  const shared = PLAYERS.filter(p => p.pos === cellIndex).length > 1;
+  if (shared) {
+    pos.x += ox;
+    pos.z += oz;
   }
-
   return pos;
 }
 
 // Piyon pozisyonlarını güncelle
 export function update3DPawnsTargetPositions() {
+  syncPawnsWithPlayers();
   PLAYERS.forEach((p, index) => {
-    if (p.threeGroup) {
-      const targetPos = getPlayer3DPosition(index, p.pos);
-      p.target3DPosition = targetPos;
-    }
+    if (p.threeGroup) p.target3DPosition = getPlayer3DPosition(index, p.pos);
   });
 }

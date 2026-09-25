@@ -1,15 +1,16 @@
 import express from 'express';
-import { EventEmitter } from 'events';
 import { supabase } from '../db.js';
 import jwt from 'jsonwebtoken';
 import { createAuthMiddleware, requireEnv } from '../middleware/auth.js';
 import { validateObjectBody } from '../middleware/security.js';
+import { openEventStream, publishToSession, subscribeToSession } from '../services/realtime.js';
+import { sendDbError } from '../middleware/errors.js';
 
 const router = express.Router();
 const authenticate = createAuthMiddleware();
 const jwtSecret = requireEnv('JWT_SECRET');
-const sessionBus = new EventEmitter();
-sessionBus.setMaxListeners(200);
+const CLOSED_STATUSES = ['finished', 'cancelled'];
+const EVENT_TYPE_PATTERN = /^[a-z_]{1,32}$/;
 
 async function ensureParticipant(sessionId, userId) {
   const { data, error } = await supabase
@@ -23,7 +24,19 @@ async function ensureParticipant(sessionId, userId) {
 }
 
 async function broadcastSession(sessionId, payload) {
-  sessionBus.emit(sessionId, { ...payload, emitted_at: new Date().toISOString() });
+  publishToSession(sessionId, payload);
+}
+
+// Oyun durumundaki en zengin oyuncunun indeksini döndürür (0 = host, 1 = guest).
+export function getWinnerIndex(stateData) {
+  const players = Array.isArray(stateData?.players) ? stateData.players : [];
+  let winner = -1;
+  players.forEach((player, index) => {
+    const money = Number(player?.money);
+    if (!Number.isFinite(money)) return;
+    if (winner === -1 || money > Number(players[winner].money)) winner = index;
+  });
+  return winner;
 }
 
 router.post('/sessions', authenticate, validateObjectBody, async (req, res) => {
@@ -38,13 +51,13 @@ router.post('/sessions', authenticate, validateObjectBody, async (req, res) => {
     .select()
     .single();
 
-  if (error) return res.status(400).json({ error: error.message });
+  if (error) return sendDbError(res, error);
 
   const { error: playerError } = await supabase
     .from('game_session_players')
     .insert([{ session_id: session.id, user_id: req.user.id, role: 'host' }]);
 
-  if (playerError) return res.status(400).json({ error: playerError.message });
+  if (playerError) return sendDbError(res, playerError);
 
   res.json(session);
 });
@@ -59,7 +72,7 @@ router.post('/sessions/:sessionId/join', authenticate, validateObjectBody, async
     .single();
 
   if (sessionError || !session) return res.status(404).json({ error: 'Session not found' });
-  if (session.status === 'finished') return res.status(409).json({ error: 'Session is already finished' });
+  if (CLOSED_STATUSES.includes(session.status)) return res.status(409).json({ error: 'Session is already closed' });
 
   const { count: playerCount, error: countError } = await supabase
     .from('game_session_players')
@@ -72,7 +85,7 @@ router.post('/sessions/:sessionId/join', authenticate, validateObjectBody, async
     .from('game_session_players')
     .upsert([{ session_id: sessionId, user_id: req.user.id, role: 'guest' }], { onConflict: 'session_id,user_id' });
 
-  if (joinError) return res.status(400).json({ error: joinError.message });
+  if (joinError) return sendDbError(res, joinError);
 
   await supabase
     .from('game_sessions')
@@ -91,7 +104,7 @@ router.get('/sessions/:sessionId', authenticate, async (req, res) => {
 
   const { data, error } = await supabase
     .from('game_sessions')
-    .select('*, game_session_players(user_id, role, users(username, avatar))')
+    .select('*, game_session_players(user_id, role, users(username, avatar, selected_character))')
     .eq('id', sessionId)
     .single();
 
@@ -102,6 +115,9 @@ router.get('/sessions/:sessionId', authenticate, async (req, res) => {
 router.put('/sessions/:sessionId/state', authenticate, validateObjectBody, async (req, res) => {
   const { sessionId } = req.params;
   const { state_data, event_type = 'state_update', version } = req.body || {};
+  if (typeof event_type !== 'string' || !EVENT_TYPE_PATTERN.test(event_type)) {
+    return res.status(400).json({ error: 'Invalid event_type' });
+  }
 
   if (!state_data || typeof state_data !== 'object' || Array.isArray(state_data)) {
     return res.status(400).json({ error: 'state_data object required' });
@@ -113,24 +129,19 @@ router.put('/sessions/:sessionId/state', authenticate, validateObjectBody, async
     return res.status(403).json({ error: 'Session access denied' });
   }
 
-  const { data: currentSession, error: currentSessionError } = await supabase
-    .from('game_sessions')
-    .select('status')
-    .eq('id', sessionId)
-    .single();
-  if (currentSessionError) return res.status(404).json({ error: 'Session not found' });
-  if (currentSession.status === 'finished') return res.status(409).json({ error: 'Session is already finished' });
-
   try {
     // 1. Mevcut session durumunu çek
     const { data: session, error: sessionErr } = await supabase
       .from('game_sessions')
-      .select('state_data, updated_at')
+      .select('status, state_data, updated_at')
       .eq('id', sessionId)
       .single();
 
     if (sessionErr || !session) {
       return res.status(404).json({ error: 'Session not found' });
+    }
+    if (CLOSED_STATUSES.includes(session.status)) {
+      return res.status(409).json({ error: 'Session is already closed', status: session.status });
     }
 
     // 2. İlk state kurulumundan sonraki her yazma, son görülen sürümü taşımalıdır.
@@ -175,7 +186,8 @@ router.put('/sessions/:sessionId/state', authenticate, validateObjectBody, async
     let updateQuery = supabase
       .from('game_sessions')
       .update({ state_data, status: 'active', updated_at: new Date().toISOString() })
-      .eq('id', sessionId);
+      .eq('id', sessionId)
+      .in('status', ['waiting', 'active']);
 
     if (version) updateQuery = updateQuery.eq('updated_at', version);
 
@@ -183,7 +195,7 @@ router.put('/sessions/:sessionId/state', authenticate, validateObjectBody, async
       .select()
       .maybeSingle();
 
-    if (error) return res.status(400).json({ error: error.message });
+    if (error) return sendDbError(res, error);
     if (!data) {
       return res.status(409).json({ error: 'Stale state update ignored', db_version: session.updated_at });
     }
@@ -228,13 +240,37 @@ router.post('/sessions/:sessionId/finish', authenticate, validateObjectBody, asy
     .from('game_sessions')
     .update({ state_data, result_data, status: 'finished', updated_at: new Date().toISOString() })
     .eq('id', sessionId)
-    .neq('status', 'finished')
+    .in('status', ['waiting', 'active'])
     .select()
-    .single();
+    .maybeSingle();
 
-  if (error) return res.status(400).json({ error: error.message });
+  if (error) return sendDbError(res, error);
+  if (!data) return res.status(409).json({ error: 'Session is already closed' });
 
-  await broadcastSession(sessionId, { type: 'finished', user_id: req.user.id, state_data, result_data });
+  // Oturum yalnızca bir kez 'finished' olabildiği için istatistikler de bir kez işlenir.
+  const winnerIndex = getWinnerIndex(state_data);
+  const { data: players } = await supabase
+    .from('game_session_players')
+    .select('user_id, role')
+    .eq('session_id', sessionId);
+  const winnerRole = winnerIndex === 0 ? 'host' : winnerIndex === 1 ? 'guest' : null;
+  // Hükmen yenilgi: maçı terk eden oyuncu (isteği yapan) kaybeder; kazanan sunucuda belirlenir.
+  const winnerUserId = result_data.reason === 'forfeit'
+    ? players?.find(p => p.user_id !== req.user.id)?.user_id || null
+    : players?.find(p => p.role === winnerRole)?.user_id || null;
+  const { error: statsError } = await supabase.rpc('apply_session_result', {
+    p_session_id: sessionId,
+    p_winner_user_id: winnerUserId,
+    p_turns: Number.isInteger(state_data.turnCount) ? state_data.turnCount : 0
+  });
+  if (statsError) console.error('[multiplayer/finish] stats update failed:', statsError.message);
+
+  await broadcastSession(sessionId, {
+    type: 'finished',
+    user_id: req.user.id,
+    state_data,
+    result_data: { ...result_data, winner_user_id: winnerUserId }
+  });
   res.json(data);
 });
 
@@ -257,25 +293,9 @@ router.get('/sessions/:sessionId/events', async (req, res) => {
     return res.status(403).end();
   }
 
-  res.writeHead(200, {
-    'Content-Type': 'text/event-stream',
-    'Cache-Control': 'no-cache, no-transform',
-    Connection: 'keep-alive'
-  });
-
-  const send = payload => {
-    res.write(`event: message\n`);
-    res.write(`data: ${JSON.stringify(payload)}\n\n`);
-  };
-
+  const send = openEventStream(req, res, () => unsubscribe());
+  const unsubscribe = subscribeToSession(sessionId, send);
   send({ type: 'connected', session_id: sessionId });
-  const heartbeat = setInterval(() => send({ type: 'heartbeat' }), 25000);
-  sessionBus.on(sessionId, send);
-
-  req.on('close', () => {
-    clearInterval(heartbeat);
-    sessionBus.off(sessionId, send);
-  });
 });
 
 export default router;

@@ -18,7 +18,7 @@ import {
   playLocalGame, showOnlineLobby, showGameModeSelection, hideGameModeSelection,
   toggleSocialPanel, switchSocialTab, toggleOfflineAccordion,
   showHome, showProfile, showBattlePass, showStore, showAchievements, showMatchHistory,
-  showPrivateRoomSelection, createPrivateRoomAction, joinPrivateRoomAction
+  showPrivateRoomSelection, createPrivateRoomAction, joinPrivateRoomAction, joinPrivateRoomByHost
 } from './ui/menu.js';
 import {
   openSettings, saveGame, loadGame, toggleTheme, initTheme,
@@ -51,6 +51,7 @@ window.showOnlineLobby = showOnlineLobby;
 window.showPrivateRoomSelection = showPrivateRoomSelection;
 window.createPrivateRoomAction = createPrivateRoomAction;
 window.joinPrivateRoomAction = joinPrivateRoomAction;
+window.joinPrivateRoomByHost = joinPrivateRoomByHost;
 window.toggleSocialPanel = toggleSocialPanel;
 window.switchSocialTab = switchSocialTab;
 window.showHome = showHome;

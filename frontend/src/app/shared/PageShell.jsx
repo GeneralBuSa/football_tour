@@ -1,17 +1,21 @@
 // Ortak sayfa sarmalayıcısı
-// PageBackground + TopNav + mount animasyonu + içerik alanını birleştirir
+// PageBackground + TopNav + giriş animasyonu + içerik alanı + site bağlantıları
 'use client';
 import PageBackground from './PageBackground.jsx';
 import TopNav from './TopNav.jsx';
+import SiteFooter from './SiteFooter.jsx';
 
-export default function PageShell({ activePage, stats, t, mounted, children }) {
+// Not: İçerik artık JS yüklenene kadar opacity:0 ile gizlenmiyor; aksi halde
+// sayfanın ilk anlamlı boyaması (FCP/LCP) hydration'ı bekliyordu. Geçiş CSS ile yapılır.
+export default function PageShell({ activePage, stats, t, children, language }) {
   return (
-    <div style={{ opacity: mounted ? 1 : 0, transition: 'opacity 0.15s ease-in-out' }}>
+    <div className="page-shell page-fade-in">
       <PageBackground />
       <TopNav activePage={activePage} stats={stats} t={t} />
-      <div style={{marginTop: '80px', padding: '20px'}}>
+      <main className="page-shell-content">
         {children}
-      </div>
+      </main>
+      <SiteFooter language={language} />
     </div>
   );
 }

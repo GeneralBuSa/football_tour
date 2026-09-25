@@ -4,8 +4,9 @@
 
 import * as THREE from 'three';
 import { PLAYERS } from '../engine/state.js';
-import { scene } from './scene.js';
-import { getCell3DPosition } from './pawns.js';
+import { boardContent } from './scene.js';
+import { boardCells } from '../engine/board.js';
+import { getStadium3DPosition } from './pawns.js';
 
 // Stadyum verileri (sahne genelinde paylaşılır)
 export let stadiumMeshes = {};
@@ -130,7 +131,7 @@ export function createStadiumModel(level, ownerColor) {
 
 // Tüm stadyumları güncelle
 export function updateStadiums3D() {
-  if (!scene) return;
+  if (!boardContent) return;
 
   const requiredStadiums = {};
 
@@ -147,7 +148,7 @@ export function updateStadiums3D() {
   // Kaldırılması gereken stadyumlar
   Object.keys(stadiumMeshes).forEach(cIdx => {
     if (!requiredStadiums[cIdx]) {
-      scene.remove(stadiumMeshes[cIdx].group);
+      boardContent.remove(stadiumMeshes[cIdx].group);
       delete stadiumMeshes[cIdx];
     }
   });
@@ -160,13 +161,16 @@ export function updateStadiums3D() {
     if (existing && existing.level === level) return;
 
     if (existing) {
-      scene.remove(existing.group);
+      boardContent.remove(existing.group);
     }
 
     const stadiumGroup = createStadiumModel(level, color);
-    const pos = getCell3DPosition(cellIdx);
+    // cIdx şehir numarasıdır; stadyum şehrin tahtadaki hücresine konur.
+    const boardIndex = boardCells.findIndex(cell => cell.type === 'city' && cell.cityIdx === cellIdx);
+    if (boardIndex === -1) return;
+    const pos = getStadium3DPosition(boardIndex);
     stadiumGroup.position.set(pos.x, 0, pos.z);
-    scene.add(stadiumGroup);
+    boardContent.add(stadiumGroup);
 
     const targetScale = 0.55 + (level * 0.1);
     stadiumMeshes[cellIdx] = {

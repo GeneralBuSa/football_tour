@@ -1,129 +1,197 @@
 'use client';
 import { useEffect, useState, useRef } from 'react';
 import apiService from '../../services/ApiService.js';
+import useSocial from './shared/useSocial.js';
+import BackgroundVideo from './shared/BackgroundVideo.jsx';
+import SiteFooter from './shared/SiteFooter.jsx';
+import { trackEvent } from '../../services/analytics.js';
+import { SITE_DESCRIPTION, SITE_NAME, SITE_URL } from './shared/siteConfig.js';
+import { MAX_MESSAGE_LENGTH } from '../../services/SocialService.js';
 import '../../css/style.css';
+// Oyun ekranı stilleri style.css'ten SONRA yüklenmeli (aynı seçicileri geçersiz kılar).
+import '../../css/components/game-screen.css';
 import tr from '../locales/tr.json';
 import en from '../locales/en.json';
+
+const isImageAvatar = value => typeof value === 'string' && /^(\/|data:image\/|https?:\/\/)/.test(value);
+
+function Avatar({ value, fallback, imgStyle }) {
+  if (isImageAvatar(value)) {
+    return <img src={value} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover', borderRadius: '50%', ...imgStyle }} />;
+  }
+  return <>{value || fallback || '👤'}</>;
+}
+
+function formatTime(iso) {
+  const date = new Date(iso);
+  if (Number.isNaN(date.getTime())) return '';
+  return `${String(date.getHours()).padStart(2, '0')}:${String(date.getMinutes()).padStart(2, '0')}`;
+}
+
+const smallButton = (background, color = '#000') => ({
+  background,
+  border: 'none',
+  color,
+  padding: '4px 10px',
+  borderRadius: '12px',
+  fontSize: '11px',
+  fontWeight: '800',
+  cursor: 'pointer',
+  minHeight: '28px'
+});
 
 export default function App() {
   const [isLoggedIn, setIsLoggedIn] = useState(false);
   const [user, setUser] = useState(null);
-  const [friends, setFriends] = useState([]);
   const [stats, setStats] = useState({ total_earnings: 0, highest_money: 0, total_properties: 0, wins: 0, total_turns: 0, xp: 0 });
   const [language, setLanguage] = useState('Türkçe');
   const [loadingClass, setLoadingClass] = useState('loading-transition-overlay');
   const [invitedFriends, setInvitedFriends] = useState([]);
   const [friendSearchInput, setFriendSearchInput] = useState('');
   const [friendAddLoading, setFriendAddLoading] = useState(false);
+  const [friendFeedback, setFriendFeedback] = useState({ type: '', text: '' });
+  const [pendingAction, setPendingAction] = useState('');
+  const [homeNotice, setHomeNotice] = useState('');
 
-  // Sol Alt Canlı Sohbet State'leri
-  const [chatMessages, setChatMessages] = useState([]);
-  const [chatChannel, setChatChannel] = useState('Grup'); // 'Grup' veya 'Kime'
-  const [chatTarget, setChatTarget] = useState('');
+  // Sol alt canlı sohbet (arkadaşlara özel mesaj)
   const [chatTargetInput, setChatTargetInput] = useState('');
   const [chatText, setChatText] = useState('');
+  const [chatError, setChatError] = useState('');
+  const [chatSending, setChatSending] = useState(false);
   const [showChatLog, setShowChatLog] = useState(false);
   const chatLogRef = useRef(null);
 
-  const acceptedFriends = friends.filter(f => f.status === 'accepted');
-  const allFriendsList = [...new Set(acceptedFriends.map(f => f.username).filter(Boolean))];
+  const social = useSocial({ isLoggedIn, user });
+  const acceptedFriends = social.grouped.accepted;
+  const activeFriend = acceptedFriends.find(f => f.friend_id === social.activeFriendId) || null;
+  const activeMessages = activeFriend ? (social.conversations[activeFriend.friend_id] || []) : [];
+  const totalUnread = Object.values(social.unread).reduce((sum, count) => sum + count, 0);
 
-  const matchingFriends = chatTargetInput.trim() 
-    ? allFriendsList.filter(f => f.toLowerCase().startsWith(chatTargetInput.toLowerCase()))
-    : allFriendsList;
+  const matchingFriends = chatTargetInput.trim()
+    ? acceptedFriends.filter(f => f.username.toLowerCase().startsWith(chatTargetInput.trim().toLowerCase()))
+    : acceptedFriends;
 
-  const handleSendChatMessage = (e) => {
+  useEffect(() => {
+    if (chatLogRef.current) chatLogRef.current.scrollTop = chatLogRef.current.scrollHeight;
+  }, [activeMessages.length, showChatLog]);
+
+  const selectChatTarget = async (friend) => {
+    setChatTargetInput('');
+    setChatError('');
+    setShowChatLog(true);
+    const result = await social.openConversation(friend.friend_id);
+    if (!result.ok) setChatError(result.error);
+  };
+
+  const handleSendChatMessage = async (e) => {
     if (e) e.preventDefault();
-    if (!chatText.trim()) return;
-
-    if (chatChannel === 'Kime') {
-      if (!chatTarget) {
-        alert('Lütfen mesaj gönderilecek arkadaşınızı seçin!');
-        return;
-      }
+    if (chatSending) return;
+    if (!isLoggedIn) {
+      setChatError('Mesaj göndermek için giriş yapın.');
+      return;
     }
-
-    const now = new Date();
-    const timeStr = `${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`;
-    const senderName = user?.username || 'Siz';
-
-    const newMessage = {
-      id: Date.now(),
-      sender: senderName,
-      channel: chatChannel,
-      target: chatChannel === 'Kime' ? chatTarget : null,
-      text: chatText.trim(),
-      time: timeStr
-    };
-
-    setChatMessages(prev => [...prev, newMessage]);
+    if (!activeFriend) {
+      setChatError('Lütfen mesaj gönderilecek arkadaşınızı seçin.');
+      return;
+    }
+    setChatSending(true);
+    const result = await social.sendMessage(activeFriend.friend_id, chatText);
+    setChatSending(false);
+    if (!result.ok) {
+      setChatError(result.error);
+      return;
+    }
+    setChatError('');
     setChatText('');
     setShowChatLog(true);
-
-    setTimeout(() => {
-      if (chatLogRef.current) {
-        chatLogRef.current.scrollTop = chatLogRef.current.scrollHeight;
-      }
-    }, 50);
   };
 
-  const openPrivateChat = (friendName) => {
-    if (!allFriendsList.includes(friendName)) {
-      alert(`"${friendName}" ile özel sohbet başlatabilmek için öncelikle arkadaş eklemelisiniz!`);
+  const openPrivateChat = (friend) => {
+    selectChatTarget(friend);
+  };
+
+  const handleAddFriend = async (e) => {
+    if (e) e.preventDefault();
+    if (friendAddLoading) return;
+    if (!isLoggedIn) {
+      setFriendFeedback({ type: 'error', text: 'Arkadaş eklemek için lütfen önce giriş yapın.' });
       return;
     }
-    setChatChannel('Kime');
-    setChatTarget(friendName);
-    setChatTargetInput('');
-    setShowChatLog(true);
-  };
-
-  const handleAddFriend = async () => {
     const username = friendSearchInput.trim();
     if (!username) {
-      alert('Lütfen eklenecek kullanıcı adını girin!');
+      setFriendFeedback({ type: 'error', text: 'Lütfen eklenecek kullanıcı adını girin.' });
       return;
     }
 
-    if (!isLoggedIn) {
-      alert('Arkadaş eklemek için lütfen önce giriş yapın!');
+    setFriendAddLoading(true);
+    const result = await social.addFriend(username);
+    setFriendAddLoading(false);
+    if (!result.ok) {
+      setFriendFeedback({ type: 'error', text: result.error });
       return;
     }
+    setFriendFeedback({
+      type: 'success',
+      text: result.data?.auto_accepted
+        ? `${username} artık arkadaşın! 🎉`
+        : `${username} kullanıcısına arkadaşlık isteği gönderildi. 📩`
+    });
+    setFriendSearchInput('');
+  };
 
-    try {
-      setFriendAddLoading(true);
-      const res = await apiService.addFriend(username);
-      if (res && res.error) {
-        alert(`Arkadaş ekleme hatası: ${res.error}`);
-      } else {
-        alert(`"${username}" kullanıcısına arkadaşlık isteği gönderildi! 📩`);
-        setFriendSearchInput('');
-      }
-    } catch (e) {
-      alert(`"${username}" adlı kullanıcı bulunamadı veya istek gönderilemedi.`);
-    } finally {
-      setFriendAddLoading(false);
+  const runFriendAction = async (key, action, successText) => {
+    setPendingAction(key);
+    const result = await action();
+    setPendingAction('');
+    setFriendFeedback(result.ok ? { type: 'success', text: successText } : { type: 'error', text: result.error });
+  };
+
+  const handleRemoveFriend = (friend) => {
+    if (!window.confirm(`${friend.username} arkadaş listenden çıkarılsın mı?`)) return;
+    runFriendAction(`remove:${friend.friend_id}`, () => social.removeFriend(friend.friend_id), `${friend.username} arkadaş listesinden çıkarıldı.`);
+  };
+
+  const sendGameInvite = async (friend) => {
+    if (invitedFriends.includes(friend.username)) {
+      setFriendFeedback({ type: 'error', text: `${friend.username} kullanıcısına zaten davet gönderildi.` });
+      return;
+    }
+    // Çevrimiçi maçlar 2 kişiliktir: aynı anda tek davet.
+    if (invitedFriends.length >= 1) {
+      setFriendFeedback({ type: 'error', text: 'Çevrimiçi maçlar 2 kişiliktir. Önce mevcut daveti iptal edin.' });
+      return;
+    }
+    setPendingAction(`invite:${friend.friend_id}`);
+    const result = await social.inviteFriend(friend);
+    setPendingAction('');
+    if (!result.ok) {
+      setFriendFeedback({ type: 'error', text: result.error });
+      return;
+    }
+    setInvitedFriends([friend.username]);
+    setFriendFeedback({ type: 'success', text: `${friend.username} kullanıcısına oyun daveti gönderildi. 📩` });
+  };
+
+  const cancelInvite = async (friendName) => {
+    setInvitedFriends(prev => prev.filter(n => n !== friendName));
+    if (typeof window.closeLobbyQueue === 'function' && document.getElementById('lobby-modal')) {
+      await window.closeLobbyQueue();
+    } else {
+      await apiService.leaveLobby();
     }
   };
 
-  const sendGameInvite = (friendName) => {
-    if (invitedFriends.includes(friendName)) {
-      alert(`${friendName} kullanıcısına zaten davet gönderildi!`);
-      return;
+  const acceptInvite = (invite) => {
+    social.dismissInvite(invite.id);
+    if (typeof window.joinPrivateRoomByHost === 'function') {
+      window.joinPrivateRoomByHost(invite.sender_username);
     }
-    if (invitedFriends.length >= 3) {
-      alert('Grup dolu (maksimum 4 kişi)!');
-      return;
-    }
-    setInvitedFriends(prev => [...prev, friendName]);
-    alert(`${friendName} kullanıcısına oyun daveti gönderildi! 📩`);
+  };
 
-    setTimeout(() => {
-      const lobbyTabBtn = document.querySelectorAll('.social-tab')[0];
-      if (window.switchSocialTab && lobbyTabBtn) {
-        window.switchSocialTab('lobby', lobbyTabBtn);
-      }
-    }, 400);
+  const inviteSender = (message) => {
+    if (message.sender_username) return message.sender_username;
+    const friend = social.friends.find(f => f.friend_id === message.sender_id);
+    return friend?.username || '';
   };
 
   useEffect(() => {
@@ -133,6 +201,11 @@ export default function App() {
 
     const savedLang = localStorage.getItem('ft26_language');
     if (savedLang) setLanguage(savedLang);
+
+    const params = new URLSearchParams(window.location.search);
+    if (params.get('accountDeleted') === '1') {
+      setHomeNotice(savedLang === 'English' ? 'Your account and its data have been deleted.' : 'Hesabın ve ilişkili verilerin silindi.');
+    }
 
     if (logged) {
       const u = apiService.getUser();
@@ -156,16 +229,17 @@ export default function App() {
           const meRes = await apiService.getMe();
           if (meRes && !meRes.error) {
             setUser(meRes);
+          } else if (!apiService.isLoggedIn()) {
+            // Token süresi dolmuş: arayüzü misafir moduna al
+            setIsLoggedIn(false);
+            setUser(null);
+            return;
           }
         } catch (e) {
           console.error(e);
         }
         apiService.getStats(u.id).then(res => {
           if (res && !res.error) setStats(res);
-        }).catch(console.error);
-
-        apiService.getFriends().then(res => {
-          if (Array.isArray(res)) setFriends(res);
         }).catch(console.error);
       }
     }).catch(console.error);
@@ -179,12 +253,17 @@ export default function App() {
   };
 
   const t = language === 'English' ? en : tr;
+  const partySize = isLoggedIn ? 1 + invitedFriends.length : 0;
+
+  const navButton = (icon, label, onClick) => (
+    <button type="button" className="nav-item-icon" title={label} aria-label={label} onClick={onClick}>{icon}</button>
+  );
 
   return (
     <>
-      <div className={loadingClass}>
+      <div className={loadingClass} aria-hidden="true">
         <div className="loading-content">
-          <img src="assets/logo.png" alt="FT26" className="loading-logo" />
+          <img src="assets/logo.webp" alt="" className="loading-logo" width="180" height="180" />
           <div className="loading-bar-container">
             <div className="loading-bar-progress"></div>
           </div>
@@ -192,40 +271,38 @@ export default function App() {
         </div>
       </div>
 
-      <h2 className="sr-only">Football Tour Simulator — 3D İzometrik Masa Oyunu</h2>
+      <h1 className="sr-only">Football Tour Simulator — 3D İzometrik Futbol Strateji Masa Oyunu</h1>
 
       {/* ANA MENÜ / KARŞILAMA EKRANI (VALORANT TARZI) */}
-      <div id="main-menu" className="main-menu-container">
-        <video autoPlay loop muted playsInline id="bg-video" className="menu-video-bg" suppressHydrationWarning>
-          <source src="assets/bg-video.mp4?v=2" type="video/mp4" />
-        </video>
+      <main id="main-menu" className="main-menu-container">
+        <BackgroundVideo />
         <div className="menu-overlay"></div>
 
         {/* Üst Navigasyon Barı */}
-        <div className="menu-top-nav">
+        <nav className="menu-top-nav" aria-label="Ana menü">
           <div className="top-nav-left">
             <div className="menu-logo">
-              <img src="assets/logo.png" alt="FT26 Logo" className="logo-img" />
+              <img src="assets/logo.webp" alt="Football Tour Simulator FT26" className="logo-img" width="120" height="120" />
             </div>
           </div>
           <div className="top-nav-center">
             <div className="nav-icons-group left">
-              <div className="nav-item-icon" title="Ana Sayfa" onClick={() => {window.showHome()}}>🏠</div>
-              <div className="nav-item-icon" title="Savaş Geçmişi" onClick={() => {window.showMatchHistory()}}>📜</div>
-              <div className="nav-item-icon" title="Profil" onClick={() => {window.location.href='/profile'}}>👤</div>
+              {navButton('🏠', t.nav_home || 'Ana Sayfa', () => { window.showHome?.(); })}
+              {navButton('📜', t.nav_history || 'Maç Geçmişi', () => { window.location.href = '/history'; })}
+              {navButton('👤', t.nav_profile || 'Profil', () => { window.location.href = '/profile'; })}
             </div>
-            <button className="btn-play-tactical" onClick={() => {window.showGameModeSelection()}}>{t.play}</button>
+            <button className="btn-play-tactical" onClick={() => { trackEvent('play_cta_click', { placement: 'top_nav' }); window.showGameModeSelection?.(); }}>{t.play}</button>
             <div className="nav-icons-group right">
-              <div className="nav-item-icon" title="Başarımlar" onClick={() => {window.showAchievements()}}>🏆</div>
-              <div className="nav-item-icon" title="Mağaza" onClick={() => {window.showStore()}}>🛒</div>
-              <div className="nav-item-icon" title="Ayarlar" onClick={() => {window.location.href='/settings'}}>⚙️</div>
+              {navButton('🏆', t.nav_achievements || 'Başarımlar', () => { window.location.href = '/achievements'; })}
+              {navButton('🛒', t.nav_store || 'Mağaza', () => { window.location.href = '/store'; })}
+              {navButton('⚙️', t.nav_settings || 'Ayarlar', () => { window.location.href = '/settings'; })}
             </div>
           </div>
           <div className="top-nav-right">
             {isLoggedIn ? (
               <div className="user-stats" style={{ gap: '10px' }}>
                 <div className="stat-item" title={t.earnings}>
-                  <span style={{display: "flex", alignItems: "center", justifyContent: "center", height: "100%"}}>🪙</span>
+                  <span aria-hidden="true" style={{display: "flex", alignItems: "center", justifyContent: "center", height: "100%"}}>🪙</span>
                   <span style={{display: "flex", alignItems: "center", position: "relative", top: "0.5px"}}>₺{(stats.total_earnings || 0).toLocaleString()}</span>
                 </div>
               </div>
@@ -235,13 +312,20 @@ export default function App() {
               </button>
             )}
           </div>
+        </nav>
+
+        {/* Mobil sabit CTA: üst bardaki OYNA butonu küçük ekranlarda gizlenir */}
+        <div className="mobile-play-cta">
+          <button type="button" className="btn-play-tactical" onClick={() => { trackEvent('play_cta_click', { placement: 'mobile_sticky' }); window.showGameModeSelection?.(); }}>
+            {t.play}
+          </button>
         </div>
 
         {/* Sol Duyuru Kartları */}
         <div className="menu-left-cards" id="menu-left-cards">
           <div className="news-cards-track">
             <div className="news-card big-card">
-              <div className="news-img" style={{backgroundImage: "url('assets/store_stadium_theme.png')"}}></div>
+              <div className="news-img" style={{backgroundImage: "url('assets/store_stadium_theme.webp')"}}></div>
               <div className="news-content-overlay">
                 <div className="news-tag">{t.weekly_match}</div>
                 <h2 className="news-title">{t.legend_duel}</h2>
@@ -249,25 +333,25 @@ export default function App() {
               </div>
             </div>
             <div className="news-card small-card">
-              <div className="news-img" style={{backgroundImage: "url('assets/store_gold_pawn_box.png')"}}></div>
+              <div className="news-img" style={{backgroundImage: "url('assets/store_gold_pawn_box.webp')"}}></div>
               <div className="news-content-overlay">
                 <h3 className="news-title-small">{t.patch_notes}</h3>
                 <p className="news-desc-small">{t.patch_desc}</p>
               </div>
             </div>
-            {/* Kesintisiz döngü için kartların kopyası */}
-            <div className="news-card big-card">
-              <div className="news-img" style={{backgroundImage: "url('assets/store_stadium_theme.png')"}}></div>
+            {/* Kesintisiz döngü için kartların kopyası (ekran okuyucudan gizli) */}
+            <div className="news-card big-card" aria-hidden="true">
+              <div className="news-img" style={{backgroundImage: "url('assets/store_stadium_theme.webp')"}}></div>
               <div className="news-content-overlay">
                 <div className="news-tag">{t.weekly_match}</div>
-                <h2 className="news-title">{t.legend_duel}</h2>
+                <div className="news-title">{t.legend_duel}</div>
                 <p className="news-desc">{t.match_desc}</p>
               </div>
             </div>
-            <div className="news-card small-card">
-              <div className="news-img" style={{backgroundImage: "url('assets/store_gold_pawn_box.png')"}}></div>
+            <div className="news-card small-card" aria-hidden="true">
+              <div className="news-img" style={{backgroundImage: "url('assets/store_gold_pawn_box.webp')"}}></div>
               <div className="news-content-overlay">
-                <h3 className="news-title-small">{t.patch_notes}</h3>
+                <div className="news-title-small">{t.patch_notes}</div>
                 <p className="news-desc-small">{t.patch_desc}</p>
               </div>
             </div>
@@ -281,48 +365,88 @@ export default function App() {
         <div id="game-mode-screen" className="game-mode-container" style={{display: 'none'}}>
           <div className="mode-screen-header">
             <button className="btn-mode-back" onClick={() => {window.hideGameModeSelection()}}>← {t.back}</button>
-            <h1 className="mode-screen-title">{t.select_mode}</h1>
+            <h2 className="mode-screen-title">{t.select_mode}</h2>
           </div>
           <div className="mode-cards-wrapper">
             {/* Hızlı Eşleşme Kartı */}
-            <div className="mode-card" onClick={() => {window.showOnlineLobby()}}>
+            <button type="button" className="mode-card" onClick={() => {window.showOnlineLobby()}}>
               <div className="mode-card-glow"></div>
               <div className="mode-card-content">
                 <span className="mode-tag">ÇEVRİMİÇİ</span>
-                <h2 className="mode-title">{t.fast_match}</h2>
+                <span className="mode-title">{t.fast_match}</span>
                 <p className="mode-desc">{t.fast_match_desc}</p>
                 <div className="mode-action-btn">{t.queue_btn}</div>
               </div>
-            </div>
+            </button>
+
+            {/* Yerel Maç Kartı: hesap gerektirmez, oyunu kayıt olmadan denemeyi sağlar */}
+            <button type="button" className="mode-card" onClick={() => { window.playLocalGame?.({ localPlayers: 2 }); }}>
+              <div className="mode-card-glow"></div>
+              <div className="mode-card-content">
+                <span className="mode-tag custom">HESAP GEREKMEZ</span>
+                <span className="mode-title">{language === 'English' ? 'LOCAL MATCH' : 'YEREL MAÇ'}</span>
+                <p className="mode-desc">{language === 'English'
+                  ? 'Two players take turns on the same device. Try the game without signing up.'
+                  : 'İki oyuncu aynı cihazda sırayla oynar. Kayıt olmadan oyunu hemen dene.'}</p>
+                <div className="mode-action-btn">{language === 'English' ? 'PLAY NOW' : 'HEMEN OYNA'}</div>
+              </div>
+            </button>
 
             {/* Özel Oyun Kartı */}
-            <div className="mode-card" onClick={() => {window.showPrivateRoomSelection()}}>
+            <button type="button" className="mode-card" onClick={() => {window.showPrivateRoomSelection()}}>
               <div className="mode-card-glow"></div>
               <div className="mode-card-content">
                 <span className="mode-tag custom">ÖZEL ODA</span>
-                <h2 className="mode-title">{t.private_game}</h2>
+                <span className="mode-title">{t.private_game}</span>
                 <p className="mode-desc">{t.private_game_desc}</p>
                 <div className="mode-action-btn">{t.room_manage}</div>
               </div>
-            </div>
+            </button>
           </div>
         </div>
 
-        {/* Sağ Sosyal Panel (VALORANT TARZI) */}
-        <div id="social-panel" className="menu-right-social">
-          {/* Açma/Kapama Butonu */}
-          <div className="social-toggle-btn" onClick={() => {window.toggleSocialPanel()}}>
-            <span id="social-toggle-arrow" className="toggle-arrow-icon">&lt;</span>
+        {homeNotice && (
+          <div className="invite-toasts" role="status">
+            <div className="invite-toast">
+              <span>{homeNotice}</span>
+              <button type="button" style={smallButton('rgba(255,255,255,0.1)', '#fff')} onClick={() => setHomeNotice('')}>Kapat</button>
+            </div>
           </div>
+        )}
+
+        {/* Gelen oyun davetleri */}
+        {social.invites.length > 0 && (
+          <div className="invite-toasts" role="region" aria-label="Oyun davetleri">
+            {social.invites.map(invite => (
+              <div key={invite.id} className="invite-toast" role="alert">
+                <span>🎮 <strong>{inviteSender(invite)}</strong> seni özel maça davet etti.</span>
+                <div className="invite-toast-actions">
+                  <button type="button" style={smallButton('linear-gradient(135deg, #2ecc71, #27ae60)', '#fff')} onClick={() => acceptInvite({ ...invite, sender_username: inviteSender(invite) })}>Katıl</button>
+                  <button type="button" style={smallButton('rgba(255,255,255,0.1)', '#fff')} onClick={() => social.dismissInvite(invite.id)}>Kapat</button>
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+
+        {/* Sağ Sosyal Panel (VALORANT TARZI) */}
+        <aside id="social-panel" className="menu-right-social collapsed" aria-label="Sosyal panel">
+          {/* Açma/Kapama Butonu */}
+          <button type="button" className="social-toggle-btn" onClick={() => {window.toggleSocialPanel()}} aria-label="Sosyal paneli aç/kapat" aria-controls="social-panel" aria-expanded="false">
+            <span id="social-toggle-arrow" className="toggle-arrow-icon" aria-hidden="true">&gt;</span>
+          </button>
 
           {/* Sekme Seçici */}
-          <div className="social-tabs">
-            <div className="social-tab active" onClick={(e) => {window.switchSocialTab('lobby', e.currentTarget)}} title="Grup Üyeleri">
-              <span className="tab-icon">📋</span>
-            </div>
-            <div className="social-tab" onClick={(e) => {window.switchSocialTab('friends', e.currentTarget)}} title="Arkadaşlar">
-              <span className="tab-icon">👥</span>
-            </div>
+          <div className="social-tabs" role="tablist">
+            <button type="button" role="tab" aria-selected="true" className="social-tab active" onClick={(e) => {window.switchSocialTab('lobby', e.currentTarget)}} title="Grup Üyeleri" aria-label="Grup Üyeleri">
+              <span className="tab-icon" aria-hidden="true">📋</span>
+            </button>
+            <button type="button" role="tab" aria-selected="false" className="social-tab" onClick={(e) => {window.switchSocialTab('friends', e.currentTarget)}} title="Arkadaşlar" aria-label={`Arkadaşlar${social.grouped.incoming.length + totalUnread ? ` (${social.grouped.incoming.length + totalUnread} yeni)` : ''}`}>
+              <span className="tab-icon" aria-hidden="true">👥</span>
+              {(social.grouped.incoming.length + totalUnread) > 0 && (
+                <span className="social-badge" aria-hidden="true">{social.grouped.incoming.length + totalUnread}</span>
+              )}
+            </button>
           </div>
 
           {/* Daraltılmış Haldeki Hızlı İkonlar (Collapsed View) */}
@@ -336,15 +460,11 @@ export default function App() {
                   justifyContent: 'center',
                   overflow: 'hidden'
                 }} title={`${user?.username} (Siz)`}>
-                  {user?.avatar && (user.avatar.startsWith('/') || user.avatar.startsWith('data:') || user.avatar.startsWith('http')) ? (
-                    <img src={user.avatar} alt="pp" style={{width: '100%', height: '100%', objectFit: 'cover'}} />
-                  ) : (
-                    user?.avatar || '👤'
-                  )}
+                  <Avatar value={user?.avatar} imgStyle={{ borderRadius: 0 }} />
                 </div>
                 <div className="collapsed-divider"></div>
-                {friends.filter(f => f.status === 'accepted').slice(0, 4).map((f, fIdx) => (
-                  <div key={fIdx} className="collapsed-avatar offline" title={`${f.username} (Çevrimdışı)`}>
+                {acceptedFriends.slice(0, 4).map(f => (
+                  <div key={f.id} className={`collapsed-avatar ${f.online ? 'online' : 'offline'}`} title={`${f.username} (${f.online ? 'Çevrimiçi' : 'Çevrimdışı'})`}>
                     {f.username[0]?.toUpperCase()}
                   </div>
                 ))}
@@ -357,10 +477,10 @@ export default function App() {
           {/* Genişletilmiş İçerik Alanı (Expanded View) */}
           <div className="social-expanded-content">
             {/* 1. GRUP SEKME İÇERİĞİ */}
-            <div id="social-lobby-content" className="social-tab-content active">
+            <div id="social-lobby-content" className="social-tab-content active" role="tabpanel">
               <div className="lobby-header">
                 <span>{t.social_party_members || 'GRUP ÜYELERİ'}</span>
-                <span className="lobby-count">{isLoggedIn ? '1/4' : '0/4'}</span>
+                <span className="lobby-count">{partySize}/2</span>
               </div>
               <div className="lobby-players">
                 {isLoggedIn ? (
@@ -373,69 +493,57 @@ export default function App() {
                         justifyContent: 'center',
                         overflow: 'hidden'
                       }}>
-                        {user?.avatar && (user.avatar.startsWith('/') || user.avatar.startsWith('data:') || user.avatar.startsWith('http')) ? (
-                          <img src={user.avatar} alt="pp" style={{width: '100%', height: '100%', objectFit: 'cover'}} />
-                        ) : (
-                          user?.avatar || '👤'
-                        )}
+                        <Avatar value={user?.avatar} imgStyle={{ borderRadius: 0 }} />
                       </div>
                       <div className="player-info-mini">
                         <div className="player-name-mini">{user?.username}</div>
                         <div className="player-status-mini">{t.social_party_leader || 'Grup Lideri'}</div>
                       </div>
                     </div>
-                    {[0, 1, 2].map((idx) => {
-                      const invitedName = invitedFriends[idx];
-                      if (invitedName) {
-                        return (
-                          <div key={idx} className="lobby-player-row active" style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', paddingRight: '10px' }}>
-                            <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-                              <div className="player-avatar-mini" style={{ backgroundColor: '#ffb74d', color: '#000', fontWeight: 'bold' }}>
-                                {invitedName[0]?.toUpperCase()}
-                              </div>
-                              <div className="player-info-mini">
-                                <div className="player-name-mini">{invitedName}</div>
-                                <div className="player-status-mini" style={{ color: '#ffb74d', fontWeight: 'bold' }}>{t.social_invited || 'Davet Edildi ⏳'}</div>
-                              </div>
-                            </div>
-                            <button 
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                setInvitedFriends(prev => prev.filter(n => n !== invitedName));
-                              }}
-                              style={{ background: 'transparent', border: 'none', color: '#ff5252', cursor: 'pointer', fontSize: '14px', fontWeight: 'bold' }}
-                              title={t.social_cancel_invite || 'Daveti İptal Et'}
-                            >
-                              ✕
-                            </button>
+                    {invitedFriends.length > 0 ? invitedFriends.map(invitedName => (
+                      <div key={invitedName} className="lobby-player-row active" style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', paddingRight: '10px' }}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                          <div className="player-avatar-mini" style={{ backgroundColor: '#ffb74d', color: '#000', fontWeight: 'bold' }}>
+                            {invitedName[0]?.toUpperCase()}
                           </div>
-                        );
-                      }
-
-                      return (
-                        <div 
-                          key={idx} 
-                          className="lobby-player-row empty"
-                          style={{ cursor: 'pointer' }}
-                          onClick={() => {
-                            const panel = document.getElementById('social-panel');
-                            if (panel && panel.classList.contains('collapsed')) {
-                              if (window.toggleSocialPanel) window.toggleSocialPanel();
-                            }
-                            const friendsTabBtn = document.querySelectorAll('.social-tab')[1];
-                            if (window.switchSocialTab && friendsTabBtn) {
-                              window.switchSocialTab('friends', friendsTabBtn);
-                            }
-                          }}
-                        >
-                          <div className="player-avatar-mini">+</div>
                           <div className="player-info-mini">
-                            <div className="player-name-mini">{t.social_empty_slot || 'Boş Yuva'}</div>
-                            <div className="player-status-mini">{t.social_invite_btn || 'Davet Et'}</div>
+                            <div className="player-name-mini">{invitedName}</div>
+                            <div className="player-status-mini" style={{ color: '#ffb74d', fontWeight: 'bold' }}>{t.social_invited || 'Davet Edildi ⏳'}</div>
                           </div>
                         </div>
-                      );
-                    })}
+                        <button
+                          type="button"
+                          onClick={(e) => { e.stopPropagation(); cancelInvite(invitedName); }}
+                          style={{ background: 'transparent', border: 'none', color: '#ff5252', cursor: 'pointer', fontSize: '14px', fontWeight: 'bold', minWidth: '28px', minHeight: '28px' }}
+                          title={t.social_cancel_invite || 'Daveti İptal Et'}
+                          aria-label={`${invitedName} davetini iptal et`}
+                        >
+                          ✕
+                        </button>
+                      </div>
+                    )) : (
+                      <button
+                        type="button"
+                        className="lobby-player-row empty"
+                        style={{ cursor: 'pointer', width: '100%', textAlign: 'left', font: 'inherit', color: 'inherit' }}
+                        onClick={() => {
+                          const panel = document.getElementById('social-panel');
+                          if (panel && panel.classList.contains('collapsed')) {
+                            if (window.toggleSocialPanel) window.toggleSocialPanel();
+                          }
+                          const friendsTabBtn = document.querySelectorAll('.social-tab')[1];
+                          if (window.switchSocialTab && friendsTabBtn) {
+                            window.switchSocialTab('friends', friendsTabBtn);
+                          }
+                        }}
+                      >
+                        <div className="player-avatar-mini" aria-hidden="true">+</div>
+                        <div className="player-info-mini">
+                          <div className="player-name-mini">{t.social_empty_slot || 'Boş Yuva'}</div>
+                          <div className="player-status-mini">{t.social_invite_btn || 'Davet Et'}</div>
+                        </div>
+                      </button>
+                    )}
                   </>
                 ) : (
                   <div style={{ padding: '20px 10px', fontSize: '13px', color: '#aaa', textAlign: 'center' }}>
@@ -446,20 +554,26 @@ export default function App() {
             </div>
 
             {/* 2. ARKADAŞLAR SEKME İÇERİĞİ */}
-            <div id="social-friends-content" className="social-tab-content">
-              <div className="friends-search" style={{ display: 'flex', gap: '6px', alignItems: 'center' }}>
-                <input 
-                  type="text" 
-                  placeholder={t.social_add_friend_placeholder || 'Kullanıcı adı girin...'} 
-                  className="search-input-field" 
+            <div id="social-friends-content" className="social-tab-content" role="tabpanel">
+              <form className="friends-search" onSubmit={handleAddFriend} style={{ display: 'flex', gap: '6px', alignItems: 'center' }} noValidate>
+                <label htmlFor="friend-add-input" className="sr-only">Arkadaş kullanıcı adı</label>
+                <input
+                  id="friend-add-input"
+                  type="text"
+                  autoComplete="off"
+                  maxLength={24}
+                  placeholder={t.social_add_friend_placeholder || 'Kullanıcı adı girin...'}
+                  className="search-input-field"
                   value={friendSearchInput}
-                  onChange={(e) => setFriendSearchInput(e.target.value)}
-                  onKeyDown={(e) => { if (e.key === 'Enter') handleAddFriend(); }}
-                  style={{ flex: 1 }}
+                  aria-invalid={friendFeedback.type === 'error'}
+                  aria-describedby="friend-feedback"
+                  onChange={(e) => { setFriendSearchInput(e.target.value); if (friendFeedback.text) setFriendFeedback({ type: '', text: '' }); }}
+                  style={{ flex: 1, minWidth: 0 }}
                 />
-                <button 
-                  onClick={handleAddFriend}
+                <button
+                  type="submit"
                   disabled={friendAddLoading}
+                  aria-busy={friendAddLoading}
                   style={{
                     background: 'linear-gradient(135deg, #00e5ff, #0288d1)',
                     border: 'none',
@@ -468,68 +582,140 @@ export default function App() {
                     borderRadius: '6px',
                     fontWeight: '800',
                     fontSize: '12px',
-                    cursor: 'pointer',
-                    whiteSpace: 'nowrap'
+                    cursor: friendAddLoading ? 'wait' : 'pointer',
+                    whiteSpace: 'nowrap',
+                    minHeight: '32px'
                   }}
                 >
                   {friendAddLoading ? '...' : (t.social_add_friend_btn || '+ Ekle')}
                 </button>
+              </form>
+              <div
+                id="friend-feedback"
+                role={friendFeedback.type === 'error' ? 'alert' : 'status'}
+                aria-live="polite"
+                className={`friend-feedback ${friendFeedback.type}`}
+              >
+                {friendFeedback.text}
               </div>
 
               <div className="friends-list-wrapper">
+                {social.friendsError && (
+                  <div className="friend-section-empty" role="alert">
+                    {social.friendsError}{' '}
+                    <button type="button" className="link-button" onClick={social.loadFriends}>Tekrar dene</button>
+                  </div>
+                )}
+
+                {isLoggedIn && social.friendsLoading && social.friends.length === 0 && !social.friendsError && (
+                  <div aria-busy="true" aria-label="Arkadaşlar yükleniyor">
+                    {[0, 1, 2].map(i => <div key={i} className="friend-row skeleton-row" />)}
+                  </div>
+                )}
+
+                {social.grouped.incoming.length > 0 && (
+                  <>
+                    <div className="friend-section-title incoming">GELEN İSTEKLER ({social.grouped.incoming.length})</div>
+                    {social.grouped.incoming.map(f => (
+                      <div key={f.id} className="friend-row">
+                        <div className="friend-avatar"><Avatar value={f.avatar} fallback={f.username?.[0]?.toUpperCase()} /></div>
+                        <div className="friend-info">
+                          <div className="friend-name">{f.username}</div>
+                          <div className="friend-status">Arkadaşlık isteği</div>
+                        </div>
+                        <div className="friend-actions">
+                          <button type="button" disabled={!!pendingAction} style={smallButton('linear-gradient(135deg, #2ecc71, #27ae60)', '#fff')}
+                            onClick={() => runFriendAction(`accept:${f.friend_id}`, () => social.acceptFriend(f.friend_id), `${f.username} artık arkadaşın! 🎉`)}>
+                            Kabul Et
+                          </button>
+                          <button type="button" disabled={!!pendingAction} style={smallButton('rgba(255, 82, 82, 0.15)', '#ff5252')} aria-label={`${f.username} isteğini reddet`}
+                            onClick={() => runFriendAction(`reject:${f.friend_id}`, () => social.rejectFriend(f.friend_id), 'İstek reddedildi.')}>
+                            Reddet
+                          </button>
+                        </div>
+                      </div>
+                    ))}
+                  </>
+                )}
+
+                {social.grouped.outgoing.length > 0 && (
+                  <>
+                    <div className="friend-section-title">GÖNDERİLEN İSTEKLER ({social.grouped.outgoing.length})</div>
+                    {social.grouped.outgoing.map(f => (
+                      <div key={f.id} className="friend-row offline">
+                        <div className="friend-avatar"><Avatar value={f.avatar} fallback={f.username?.[0]?.toUpperCase()} /></div>
+                        <div className="friend-info">
+                          <div className="friend-name">{f.username}</div>
+                          <div className="friend-status">Yanıt bekleniyor</div>
+                        </div>
+                        <div className="friend-actions">
+                          <button type="button" disabled={!!pendingAction} style={smallButton('rgba(255,255,255,0.08)', '#ddd')}
+                            onClick={() => runFriendAction(`cancel:${f.friend_id}`, () => social.removeFriend(f.friend_id), 'İstek geri çekildi.')}>
+                            Geri Çek
+                          </button>
+                        </div>
+                      </div>
+                    ))}
+                  </>
+                )}
+
+                <div className="friend-section-title accepted">ARKADAŞLAR ({acceptedFriends.length})</div>
                 {acceptedFriends.length > 0 ? (
                   acceptedFriends.map(friend => {
-                    const friendName = friend.username;
-                    const isInvited = invitedFriends.includes(friendName);
-
+                    const isInvited = invitedFriends.includes(friend.username);
+                    const unreadCount = social.unread[friend.friend_id] || 0;
                     return (
-                      <div key={friend.id || friend.friend_id || friendName} className="friend-row online">
+                      <div key={friend.id} className={`friend-row ${friend.online ? 'online' : 'offline'}`}>
                         <div className="friend-avatar">
-                          {friend.avatar && friend.avatar.startsWith('http') ? (
-                            <img src={friend.avatar} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover', borderRadius: '50%' }} />
-                          ) : (
-                            friend.avatar || friendName?.[0]?.toUpperCase() || '👤'
-                          )}
-                          <span className="online-indicator"></span>
+                          <Avatar value={friend.avatar} fallback={friend.username?.[0]?.toUpperCase()} />
+                          {friend.online && <span className="online-indicator" aria-hidden="true"></span>}
                         </div>
                         <div className="friend-info">
-                          <div className="friend-name">{friendName}</div>
-                          <div className="friend-status">{t.social_friend_label || 'Arkadaş'}</div>
+                          <div className="friend-name">{friend.username}</div>
+                          <div className="friend-status">{friend.online ? 'Çevrimiçi' : 'Çevrimdışı'}</div>
                         </div>
-                        <div style={{ display: 'flex', gap: '6px', alignItems: 'center', marginLeft: 'auto' }}>
+                        <div className="friend-actions">
                           <button
-                            onClick={() => sendGameInvite(friendName)}
-                            style={{
-                              background: isInvited ? 'rgba(255, 183, 77, 0.2)' : 'linear-gradient(135deg, #00e5ff, #0288d1)',
-                              border: isInvited ? '1px solid #ffb74d' : 'none',
-                              color: isInvited ? '#ffb74d' : '#000',
-                              padding: '4px 10px',
-                              borderRadius: '12px',
-                              fontSize: '11px',
-                              fontWeight: '800',
-                              cursor: 'pointer'
-                            }}
+                            type="button"
+                            onClick={() => sendGameInvite(friend)}
+                            disabled={pendingAction === `invite:${friend.friend_id}`}
+                            style={isInvited
+                              ? { ...smallButton('rgba(255, 183, 77, 0.2)', '#ffb74d'), border: '1px solid #ffb74d' }
+                              : smallButton('linear-gradient(135deg, #00e5ff, #0288d1)')}
                           >
                             {isInvited ? (t.social_invited || 'Davet Edildi') : (t.social_invite_btn || 'Davet Et')}
                           </button>
-                          <span
-                            onClick={(e) => { e.stopPropagation(); openPrivateChat(friendName); }}
-                            style={{ cursor: 'pointer', fontSize: '13px', padding: '2px 4px', borderRadius: '4px', background: 'rgba(255,255,255,0.05)' }}
-                            title={`${friendName} ile Özel Sohbet Başlat`}
+                          <button
+                            type="button"
+                            className="icon-button"
+                            onClick={(e) => { e.stopPropagation(); openPrivateChat(friend); }}
+                            title={`${friend.username} ile sohbet et`}
+                            aria-label={`${friend.username} ile sohbet et${unreadCount ? `, ${unreadCount} okunmamış mesaj` : ''}`}
                           >
                             💬
-                          </span>
+                            {unreadCount > 0 && <span className="social-badge" aria-hidden="true">{unreadCount}</span>}
+                          </button>
+                          <button
+                            type="button"
+                            className="icon-button danger"
+                            disabled={!!pendingAction}
+                            onClick={() => handleRemoveFriend(friend)}
+                            title="Arkadaşlıktan çıkar"
+                            aria-label={`${friend.username} arkadaşlıktan çıkar`}
+                          >
+                            ✕
+                          </button>
                         </div>
                       </div>
                     );
                   })
                 ) : (
                   <div className="friend-row offline">
-                    <div className="friend-avatar">👤</div>
-                      <div className="friend-info">
-                      <div className="friend-name">Henüz arkadaş yok</div>
-                      <div className="friend-status">Kullanıcı adıyla arkadaş ekleyebilirsin</div>
-                      </div>
+                    <div className="friend-avatar" aria-hidden="true">👤</div>
+                    <div className="friend-info">
+                      <div className="friend-name">{isLoggedIn ? 'Henüz arkadaş yok' : 'Giriş yapılmadı'}</div>
+                      <div className="friend-status">{isLoggedIn ? 'Kullanıcı adıyla arkadaş ekleyebilirsin' : 'Arkadaşlarını görmek için giriş yap'}</div>
+                    </div>
                   </div>
                 )}
               </div>
@@ -537,213 +723,257 @@ export default function App() {
           </div>
 
           <button className="btn-lobby-exit" onClick={() => {window.closeApp()}}>OYUNDAN ÇIK</button>
-        </div>
+        </aside>
 
-        {/* Sol Alt Canlı Sohbet Barı (360px Genişlik & Sol Üst Kartlarla Hizalı 20px) */}
-        <div className="menu-left-chat" style={{
-          position: 'absolute',
-          left: '20px',
-          bottom: '30px',
-          zIndex: 100,
-          width: '360px',
-          maxWidth: '88%',
-          display: 'flex',
-          flexDirection: 'column',
-          gap: '4px',
-          background: 'transparent',
-          border: 'none',
-          boxShadow: 'none',
-          padding: 0
-        }}>
-          {/* Sohbet Geçmişi */}
-          {showChatLog && (
-            <div style={{
-              background: 'rgba(9, 11, 14, 0.95)',
-              border: '1px solid rgba(255, 255, 255, 0.12)',
-              borderRadius: '6px 6px 0 0',
-              padding: '8px 10px',
-              maxHeight: '125px',
-              width: '100%',
-              boxSizing: 'border-box',
-              overflowY: 'auto',
-              display: 'flex',
-              flexDirection: 'column',
-              gap: '4px',
-              boxShadow: '0 -6px 20px rgba(0,0,0,0.6)'
-            }} ref={chatLogRef}>
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderBottom: '1px solid rgba(255,255,255,0.08)', paddingBottom: '3px', marginBottom: '2px' }}>
-                <span style={{ fontSize: '10px', fontWeight: '800', color: chatChannel === 'Kime' ? '#e573a7' : '#00e5ff' }}>
-                  💬 {chatChannel === 'Grup' ? 'GRUP SOHBETİ' : `ÖZEL: ${chatTarget || 'Alıcı Seçin'}`}
-                </span>
-                <button onClick={() => setShowChatLog(false)} style={{ background: 'transparent', border: 'none', color: '#888', cursor: 'pointer', fontSize: '11px' }}>✕</button>
-              </div>
-
-              {chatMessages
-                .filter(m => chatChannel === 'Grup' ? m.channel === 'Grup' : (m.channel === 'Kime' && (m.target === chatTarget || m.sender === chatTarget)))
-                .map(msg => (
-                  <div key={msg.id} style={{ fontSize: '11px', lineHeight: '1.3' }}>
-                    <span style={{ fontSize: '9px', color: '#666', marginRight: '4px' }}>[{msg.time}]</span>
-                    <span style={{ fontWeight: '800', color: msg.sender === 'Sistem' ? '#ffb74d' : (msg.sender === (user?.username || 'Siz') ? '#e573a7' : '#00e5ff'), marginRight: '4px' }}>
-                      {msg.sender}:
-                    </span>
-                    <span style={{ color: '#eee' }}>{msg.text}</span>
-                  </div>
-                ))}
-            </div>
-          )}
-
-          {/* Referans Görsel Chat Input Barı */}
-          <div style={{ position: 'relative', width: '100%', boxSizing: 'border-box' }}>
-            {/* Autocomplete Popup */}
-            {chatChannel === 'Kime' && !chatTarget && matchingFriends.length > 0 && (
+        {/* Sol Alt Canlı Sohbet Barı (arkadaşlara özel mesaj) */}
+        {isLoggedIn && (
+          <div className="menu-left-chat" style={{
+            position: 'absolute',
+            left: '20px',
+            bottom: '30px',
+            zIndex: 100,
+            width: '360px',
+            maxWidth: '88%',
+            display: 'flex',
+            flexDirection: 'column',
+            gap: '4px',
+            background: 'transparent',
+            border: 'none',
+            boxShadow: 'none',
+            padding: 0
+          }}>
+            {showChatLog && (
               <div style={{
-                position: 'absolute',
-                bottom: '100%',
-                left: '0',
-                marginBottom: '2px',
+                background: 'rgba(9, 11, 14, 0.95)',
+                border: '1px solid rgba(255, 255, 255, 0.12)',
+                borderRadius: '6px 6px 0 0',
+                padding: '8px 10px',
+                maxHeight: '160px',
+                width: '100%',
+                boxSizing: 'border-box',
+                overflowY: 'auto',
                 display: 'flex',
                 flexDirection: 'column',
-                width: '120px',
-                boxShadow: '0 4px 12px rgba(0,0,0,0.6)',
-                zIndex: 110
-              }}>
-                {matchingFriends.slice(0, 3).map((fName, idx) => (
-                  <div 
-                    key={fName}
-                    onClick={() => {
-                      setChatTarget(fName);
-                      setChatTargetInput('');
-                    }}
-                    style={{
-                      background: idx === 0 ? '#d4719e' : '#71717a',
-                      color: '#ffffff',
-                      padding: '4px 8px',
-                      fontSize: '11px',
-                      fontWeight: '600',
-                      fontFamily: "'Outfit', sans-serif",
-                      cursor: 'pointer'
-                    }}
-                  >
-                    {fName}
+                gap: '4px',
+                boxShadow: '0 -6px 20px rgba(0,0,0,0.6)'
+              }} ref={chatLogRef} role="log" aria-live="polite" aria-label={activeFriend ? `${activeFriend.username} ile sohbet` : 'Sohbet'}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderBottom: '1px solid rgba(255,255,255,0.08)', paddingBottom: '3px', marginBottom: '2px' }}>
+                  <span style={{ fontSize: '10px', fontWeight: '800', color: '#e573a7' }}>
+                    💬 {activeFriend ? `ÖZEL: ${activeFriend.username}` : 'ALICI SEÇİN'}
+                  </span>
+                  <button type="button" onClick={() => setShowChatLog(false)} aria-label="Sohbeti küçült" style={{ background: 'transparent', border: 'none', color: '#888', cursor: 'pointer', fontSize: '11px', minWidth: '24px', minHeight: '24px' }}>✕</button>
+                </div>
+
+                {!activeFriend && (
+                  <div style={{ fontSize: '11px', color: '#888' }}>
+                    {acceptedFriends.length ? 'Mesaj göndermek için aşağıya bir arkadaşının adını yaz.' : 'Mesajlaşmak için önce arkadaş ekle.'}
                   </div>
-                ))}
+                )}
+                {activeFriend && social.conversationLoading && activeMessages.length === 0 && (
+                  <div style={{ fontSize: '11px', color: '#888' }} aria-busy="true">Mesajlar yükleniyor...</div>
+                )}
+                {activeFriend && !social.conversationLoading && activeMessages.length === 0 && (
+                  <div style={{ fontSize: '11px', color: '#888' }}>Henüz mesaj yok. İlk mesajı sen gönder!</div>
+                )}
+                {activeMessages.map(msg => {
+                  const mine = msg.sender_id === user?.id;
+                  const senderName = mine ? (user?.username || 'Siz') : activeFriend?.username;
+                  return (
+                    <div key={msg.id} style={{ fontSize: '11px', lineHeight: '1.3', wordBreak: 'break-word' }}>
+                      <span style={{ fontSize: '9px', color: '#888', marginRight: '4px' }}>[{formatTime(msg.created_at)}]</span>
+                      <span style={{ fontWeight: '800', color: mine ? '#e573a7' : '#00e5ff', marginRight: '4px' }}>{senderName}:</span>
+                      <span style={{ color: msg.kind === 'game_invite' ? '#ffb74d' : '#eee' }}>{msg.body}</span>
+                      {msg.kind === 'game_invite' && !mine && (
+                        <button type="button" onClick={() => acceptInvite({ ...msg, sender_username: activeFriend?.username })} style={{ ...smallButton('#2ecc71', '#fff'), marginLeft: '6px', minHeight: '22px', padding: '2px 8px' }}>Katıl</button>
+                      )}
+                    </div>
+                  );
+                })}
               </div>
             )}
 
-            <form 
-              onSubmit={handleSendChatMessage}
-              style={{
-                background: 'rgba(9, 11, 14, 0.95)',
-                border: '1px solid rgba(255, 255, 255, 0.12)',
-                height: '28px',
-                display: 'flex',
-                alignItems: 'center',
-                padding: '0 8px',
-                boxShadow: '0 4px 15px rgba(0,0,0,0.4)',
-                width: '100%',
-                boxSizing: 'border-box'
-              }}
-            >
-              {/* Prefix Text */}
-              {chatChannel === 'Grup' ? (
-                <span 
-                  onClick={() => { setChatChannel('Kime'); setChatTarget(''); }}
-                  style={{ color: '#00e5ff', fontWeight: '700', fontSize: '13px', marginRight: '6px', cursor: 'pointer', userSelect: 'none' }}
-                  title="Kanal Değiştir (Grup / Kime)"
-                >
-                  Grup:
-                </span>
-              ) : chatTarget ? (
-                <span 
-                  onClick={() => { setChatTarget(''); setChatTargetInput(''); }}
-                  style={{ background: '#d4719e', color: '#fff', padding: '2px 6px', borderRadius: '2px', fontWeight: '700', fontSize: '12px', marginRight: '8px', cursor: 'pointer' }}
-                  title="Alıcıyı Değiştir"
-                >
-                  {chatTarget}
-                </span>
-              ) : (
-                <span 
-                  onClick={() => setChatChannel('Grup')}
-                  style={{ color: '#e573a7', fontWeight: '700', fontSize: '13px', marginRight: '6px', cursor: 'pointer', userSelect: 'none' }}
-                  title="Grup Moduna Geç"
-                >
-                  Kime:
-                </span>
+            <div style={{ position: 'relative', width: '100%', boxSizing: 'border-box' }}>
+              {/* Autocomplete Popup */}
+              {!activeFriend && chatTargetInput.trim() && matchingFriends.length > 0 && (
+                <div role="listbox" aria-label="Arkadaş önerileri" style={{
+                  position: 'absolute',
+                  bottom: '100%',
+                  left: '0',
+                  marginBottom: '2px',
+                  display: 'flex',
+                  flexDirection: 'column',
+                  width: '140px',
+                  boxShadow: '0 4px 12px rgba(0,0,0,0.6)',
+                  zIndex: 110
+                }}>
+                  {matchingFriends.slice(0, 3).map((friend, idx) => (
+                    <button
+                      type="button"
+                      role="option"
+                      aria-selected={idx === 0}
+                      key={friend.friend_id}
+                      onClick={() => selectChatTarget(friend)}
+                      style={{
+                        background: idx === 0 ? '#d4719e' : '#71717a',
+                        color: '#ffffff',
+                        padding: '6px 8px',
+                        fontSize: '11px',
+                        fontWeight: '600',
+                        fontFamily: "'Outfit', sans-serif",
+                        cursor: 'pointer',
+                        border: 'none',
+                        textAlign: 'left'
+                      }}
+                    >
+                      {friend.username}
+                    </button>
+                  ))}
+                </div>
               )}
 
-              {/* Input Field */}
-              {chatChannel === 'Kime' && !chatTarget ? (
-                <div style={{ display: 'flex', alignItems: 'center', flex: 1 }}>
-                  <input 
-                    type="text"
-                    value={chatTargetInput}
-                    onChange={(e) => setChatTargetInput(e.target.value)}
-                    onFocus={() => setShowChatLog(true)}
-                    onKeyDown={(e) => {
-                      if (e.key === 'Tab' || e.key === 'Enter') {
-                        e.preventDefault();
-                        if (matchingFriends.length > 0) {
-                          setChatTarget(matchingFriends[0]);
-                          setChatTargetInput('');
-                        }
-                      }
-                    }}
-                    style={{
-                      background: 'transparent',
-                      border: 'none',
-                      outline: 'none',
-                      color: '#ffffff',
-                      fontSize: '13px',
-                      fontFamily: "'Outfit', sans-serif",
-                      width: `${Math.max(20, chatTargetInput.length * 9)}px`
-                    }}
-                    autoFocus
-                  />
-                  <span style={{ color: 'rgba(255, 255, 255, 0.4)', fontSize: '11px', marginLeft: '10px', userSelect: 'none', pointerEvents: 'none' }}>
-                    Tamamlamak için: [TAB]
-                  </span>
+              {chatError && (
+                <div id="chat-error" role="alert" style={{ background: 'rgba(255, 82, 82, 0.15)', color: '#ff8a80', fontSize: '11px', padding: '4px 8px', border: '1px solid rgba(255, 82, 82, 0.3)', borderBottom: 'none' }}>
+                  {chatError}
                 </div>
-              ) : (
-                <input 
-                  type="text"
-                  placeholder="Mesaj yazmak için tıklayın..."
-                  value={chatText}
-                  onChange={(e) => setChatText(e.target.value)}
-                  onFocus={() => setShowChatLog(true)}
-                  onKeyDown={(e) => {
-                    if (e.key === 'Tab') {
-                      e.preventDefault();
-                      if (chatChannel === 'Grup') {
-                        setChatChannel('Kime');
-                      } else {
-                        setChatChannel('Grup');
-                      }
-                    }
-                  }}
-                  style={{
-                    flex: 1,
-                    background: 'transparent',
-                    border: 'none',
-                    outline: 'none',
-                    color: '#ffffff',
-                    fontSize: '13px',
-                    fontFamily: "'Outfit', sans-serif"
-                  }}
-                />
               )}
-            </form>
+
+              <form
+                onSubmit={handleSendChatMessage}
+                style={{
+                  background: 'rgba(9, 11, 14, 0.95)',
+                  border: '1px solid rgba(255, 255, 255, 0.12)',
+                  minHeight: '32px',
+                  display: 'flex',
+                  alignItems: 'center',
+                  padding: '0 8px',
+                  boxShadow: '0 4px 15px rgba(0,0,0,0.4)',
+                  width: '100%',
+                  boxSizing: 'border-box'
+                }}
+              >
+                {activeFriend ? (
+                  <button
+                    type="button"
+                    onClick={() => { social.openConversation(null); setChatTargetInput(''); setChatError(''); }}
+                    style={{ background: '#d4719e', color: '#fff', padding: '2px 6px', borderRadius: '2px', fontWeight: '700', fontSize: '12px', marginRight: '8px', cursor: 'pointer', border: 'none' }}
+                    title="Alıcıyı Değiştir"
+                    aria-label={`Alıcı: ${activeFriend.username}. Değiştirmek için tıklayın`}
+                  >
+                    {activeFriend.username}
+                  </button>
+                ) : (
+                  <label htmlFor="chat-target-input" style={{ color: '#e573a7', fontWeight: '700', fontSize: '13px', marginRight: '6px', userSelect: 'none' }}>
+                    Kime:
+                  </label>
+                )}
+
+                {!activeFriend ? (
+                  <div style={{ display: 'flex', alignItems: 'center', flex: 1, minWidth: 0 }}>
+                    <input
+                      id="chat-target-input"
+                      type="text"
+                      autoComplete="off"
+                      value={chatTargetInput}
+                      onChange={(e) => { setChatTargetInput(e.target.value); setChatError(''); }}
+                      onFocus={() => setShowChatLog(true)}
+                      onKeyDown={(e) => {
+                        if (e.key === 'Tab' || e.key === 'Enter') {
+                          if (matchingFriends.length > 0 && chatTargetInput.trim()) {
+                            e.preventDefault();
+                            selectChatTarget(matchingFriends[0]);
+                          } else if (e.key === 'Enter') {
+                            e.preventDefault();
+                            setChatError(acceptedFriends.length ? 'Bu isimde bir arkadaşın yok.' : 'Mesajlaşmak için önce arkadaş ekle.');
+                          }
+                        }
+                      }}
+                      aria-describedby={chatError ? 'chat-error' : undefined}
+                      style={{
+                        background: 'transparent',
+                        border: 'none',
+                        outline: 'none',
+                        color: '#ffffff',
+                        fontSize: '13px',
+                        fontFamily: "'Outfit', sans-serif",
+                        flex: 1,
+                        minWidth: 0
+                      }}
+                    />
+                    <span style={{ color: 'rgba(255, 255, 255, 0.5)', fontSize: '11px', marginLeft: '10px', userSelect: 'none', pointerEvents: 'none', whiteSpace: 'nowrap' }} className="chat-hint">
+                      Tamamlamak için: [TAB]
+                    </span>
+                  </div>
+                ) : (
+                  <>
+                    <label htmlFor="chat-message-input" className="sr-only">{`${activeFriend.username} kullanıcısına mesaj`}</label>
+                    <input
+                      id="chat-message-input"
+                      type="text"
+                      autoComplete="off"
+                      maxLength={MAX_MESSAGE_LENGTH}
+                      placeholder="Mesaj yazın ve Enter'a basın..."
+                      value={chatText}
+                      onChange={(e) => { setChatText(e.target.value); if (chatError) setChatError(''); }}
+                      onFocus={() => setShowChatLog(true)}
+                      aria-invalid={!!chatError}
+                      aria-describedby={chatError ? 'chat-error' : undefined}
+                      disabled={chatSending}
+                      style={{
+                        flex: 1,
+                        minWidth: 0,
+                        background: 'transparent',
+                        border: 'none',
+                        outline: 'none',
+                        color: '#ffffff',
+                        fontSize: '13px',
+                        fontFamily: "'Outfit', sans-serif"
+                      }}
+                    />
+                    <button type="submit" disabled={chatSending || !chatText.trim()} aria-label="Mesajı gönder" style={{ background: 'transparent', border: 'none', color: chatText.trim() ? '#00e5ff' : '#555', cursor: chatText.trim() ? 'pointer' : 'default', fontSize: '14px', minWidth: '28px', minHeight: '28px' }}>
+                      {chatSending ? '…' : '➤'}
+                    </button>
+                  </>
+                )}
+              </form>
+            </div>
           </div>
-        </div>
-      </div>
+        )}
+        <SiteFooter language={language} compact className="menu-footer-links" />
+        <script
+          type="application/ld+json"
+          // Yapılandırılmış veri: web üzerinden oynanan bir video oyunu (LocalBusiness değildir).
+          dangerouslySetInnerHTML={{ __html: JSON.stringify({
+            '@context': 'https://schema.org',
+            '@type': 'VideoGame',
+            name: SITE_NAME,
+            alternateName: 'FT26',
+            url: SITE_URL,
+            description: SITE_DESCRIPTION,
+            genre: ['Strategy', 'Board game', 'Sports'],
+            gamePlatform: 'Web browser',
+            applicationCategory: 'Game',
+            inLanguage: ['tr', 'en'],
+            playMode: ['SinglePlayer', 'MultiPlayer'],
+            image: `${SITE_URL}/og-image.jpg`
+          }) }}
+        />
+      </main>
 
       <div className="game-wrap" id="app" style={{display: 'none'}}>
 
-        {/* ÜST BAR (Sistem/Ayarlar Butonlu) */}
+        {/* ÜST HUD: tur, sıra, süre ve olay kartı (ekran uzayında, her zaman okunaklı) */}
         <div className="topbar">
-          <span className="game-title">⚽ Football Tour Simulator 3D</span>
-          <div className="topbar-mid">
+          <div className="game-status-card" role="status" aria-live="polite">
             <span className="turn-badge" id="turn-badge">TUR 1</span>
             <span className="phase-label" id="phase-label">Zar Bekleniyor...</span>
+            <span className="status-divider" aria-hidden="true"></span>
+            <span className="timer-chip" aria-label="Kalan süre">
+              <span aria-hidden="true">⏱</span>
+              <span id="timer-val">30:00</span>
+            </span>
+          </div>
+          <div className="event-card">
+            <p className="tutorial-text" id="tutorial-text">Oyunun amacı mülk satın almak ve zenginleşmektir.</p>
           </div>
         </div>
 
@@ -751,41 +981,44 @@ export default function App() {
         <div className="board-wrap">
           <div className="board-3d-container" id="board-3d-container">
             <div className="board-grid" id="board-grid"></div>
-            <canvas id="three-canvas"></canvas>
           </div>
+          {/* 3D katman tahtanın dışında, ekran uzayında: modeller tahtada ayakta durur */}
+          <canvas id="three-canvas" aria-hidden="true"></canvas>
         </div>
 
         {/* YAN PANEL (Şehirler / Olaylar) */}
-        <div className="side-panel" id="side-panel">
-          <div className="side-panel-toggle" onClick={() => {document.getElementById('side-panel').classList.toggle('open')}}>📋 Menü
-          </div>
-          <div className="panel-tabs">
-            <div className="ptab active" onClick={(e) => {window.switchTab('props',e.currentTarget)}}>Şehirler</div>
-            <div className="ptab" onClick={(e) => {window.switchTab('log',e.currentTarget)}}>Olaylar</div>
+        <aside className="side-panel" id="side-panel" aria-label="Şehirler ve olaylar">
+          <button type="button" className="side-panel-toggle" aria-controls="side-panel" onClick={() => {document.getElementById('side-panel').classList.toggle('open')}}>
+            <span aria-hidden="true">📋</span> Menü
+          </button>
+          <div className="panel-tabs" role="tablist">
+            <button type="button" role="tab" className="ptab active" onClick={(e) => {window.switchTab('props',e.currentTarget)}}>Şehirler</button>
+            <button type="button" role="tab" className="ptab" onClick={(e) => {window.switchTab('log',e.currentTarget)}}>Olaylar</button>
           </div>
           <div className="panel-body" id="panel-body"></div>
-        </div>
+        </aside>
 
-        {/* OYUNCU HUD BİLGİLERİ (SOL VE SAĞ ALT) */}
+        {/* OYUNCU KARTLARI (köşeler) */}
         <div className="hud-players" id="hud-players"></div>
 
         {/* ALT ORTA KONTROLLER (Zar At ve Sırayı Geç) */}
         <div className="hud-center-controls">
-          <button className="btn-skip-tutorial" id="btn-roll" onClick={() => {window.rollDice()}}>
-            <span>🎲 ZAR AT</span>
-            <span style={{fontSize: '10px'}}>&gt;&gt;</span>
-          </button>
-          <button className="btn-skip-tutorial" id="btn-end" onClick={() => {window.endTurn()}}
-            style={{display: 'none', background: 'linear-gradient(to bottom, #ef5350, #d32f2f)', boxShadow: '0 5px 0 #b71c1c'}}>
-            <span>Sırayı Geç</span>
-          </button>
+          <div className="dice-result" id="dice-result" aria-live="polite"></div>
+          <div className="hud-control-row">
+            <button type="button" className="game-btn game-btn-primary" id="btn-roll" onClick={() => {window.rollDice()}}>
+              <span aria-hidden="true">🎲</span> ZAR AT
+            </button>
+            <button type="button" className="game-btn game-btn-secondary" id="btn-end" onClick={() => {window.endTurn()}} style={{display: 'none'}}>
+              Sırayı Geç <span aria-hidden="true">→</span>
+            </button>
+          </div>
         </div>
 
         {/* SAĞ AKSİYON BUTONLARI */}
         <div className="hud-right-actions">
-          <button className="btn-round-action" onClick={() => {window.toggleTheme()}} title="Tema Değiştir" id="btn-theme">🌙</button>
-          <button className="btn-round-action" onClick={() => {window.openSettings()}} title="Ayarlar">⚙️</button>
-          <button className="btn-round-action" onClick={() => {window.toggleFullscreen()}} title="Tam Ekran">🔍</button>
+          <button type="button" className="btn-round-action" onClick={() => {window.toggleTheme()}} title="Tema Değiştir" aria-label="Tema değiştir" id="btn-theme">🌙</button>
+          <button type="button" className="btn-round-action" onClick={() => {window.openSettings()}} title="Ayarlar" aria-label="Oyun ayarları">⚙️</button>
+          <button type="button" className="btn-round-action" onClick={() => {window.toggleFullscreen()}} title="Tam Ekran" aria-label="Tam ekran">⛶</button>
         </div>
 
       </div>

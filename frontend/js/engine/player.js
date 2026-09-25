@@ -4,12 +4,14 @@
 
 import {
   PLAYERS, currentPlayer, turnCount, diceRolled,
-  gameEnded,
-  setCurrentPlayer, setTurnCount, setDiceRolled, setTutorialText, setGameEnded
+  gameEnded, timerId,
+  setCurrentPlayer, setTurnCount, setDiceRolled, setTutorialText, setGameEnded, setTimerId
 } from './state.js';
 import { updateTutorialHUD, renderPanel, showNotif } from '../ui/panel.js';
 import gameService from '../../services/GameService.js';
 import multiplayerService from '../../services/MultiplayerService.js';
+import { trackEvent } from '../../services/analytics.js';
+import { resolveCharacterKey } from '../3d/pawns.js';
 
 function escapeHtml(value) {
   return String(value ?? '').replace(/[&<>"']/g, char => ({
@@ -21,39 +23,50 @@ function escapeHtml(value) {
   }[char]));
 }
 
-// Oyuncu HUD kartlarını çiz (ekran köşeleri)
+const isImageAvatar = value => typeof value === 'string' && /^(\/|data:image\/|https?:\/\/)/.test(value);
+
+function avatarMarkup(p) {
+  const src = p.avatarImg || (isImageAvatar(p.avatar) ? p.avatar : null);
+  if (src) return `<img src="${escapeHtml(src)}" alt="" />`;
+  return `<span aria-hidden="true">${escapeHtml(p.avatar || '👤')}</span>`;
+}
+
+// Üst HUD'daki tur ve sıra bilgisini günceller.
+export function updateTurnHud() {
+  const turnBadge = document.getElementById('turn-badge');
+  const phaseLabel = document.getElementById('phase-label');
+  const active = PLAYERS[currentPlayer];
+  if (turnBadge) turnBadge.textContent = `TUR ${turnCount}`;
+  // Maç bittiğinde finishGame kazananı yazar; üzerine yazılmaz.
+  if (phaseLabel && active && !gameEnded) {
+    phaseLabel.textContent = `${active.name} oynuyor`;
+    phaseLabel.style.setProperty('--player-color', active.color);
+  }
+}
+
+// Oyuncu HUD kartlarını çiz (ekran köşeleri): 0 sol-alt, 1 sol-üst, 2 sağ-üst, 3 sağ-alt
 export function renderPlayers() {
   const container = document.getElementById('hud-players');
   if (!container) return;
 
-  let html = '';
-
-  // Köşeler: 0: Sol-Alt, 1: Sol-Üst, 2: Sağ-Üst, 3: Sağ-Alt
-  const positions = [
-    'bottom: 0; left: 0;',
-    'top: 0; left: 0;',
-    'top: 0; right: 0;',
-    'bottom: 0; right: 0;'
-  ];
-
-  PLAYERS.forEach((p, idx) => {
-    const isActive = idx === currentPlayer;
-    const cardTheme = idx % 2 === 0 ? 'blue-theme' : 'pink-theme';
-
-    html += `
-      <div class="hud-player-card ${cardTheme}" style="position: absolute; ${positions[idx]} ${isActive ? 'box-shadow: 0 0 20px ' + p.color + '; transform: scale(1.03);' : 'opacity: 0.85;'}">
-        <div class="hud-avatar-box" style="background:${p.color}22; overflow: hidden; display: flex; align-items: center; justify-content: center; border-radius: 50%;">
-          ${p.avatarImg ? `<img src="${escapeHtml(p.avatarImg)}" style="width: 100%; height: 100%; object-fit: cover;" />` : `<span style="font-size:32px">${escapeHtml(p.avatar)}</span>`}
-        </div>
+  const corners = ['corner-bl', 'corner-tl', 'corner-tr', 'corner-br'];
+  container.innerHTML = PLAYERS.map((p, idx) => {
+    const isActive = idx === currentPlayer && !gameEnded;
+    const stadiumCount = Object.values(p.stadiums || {}).reduce((sum, level) => sum + (level || 0), 0);
+    return `
+      <div class="hud-player-card ${corners[idx] || ''} ${isActive ? 'is-active' : ''} ${p.money <= 0 ? 'is-bankrupt' : ''}"
+        style="--player-color:${escapeHtml(p.color)}" data-character="${resolveCharacterKey(p, idx)}" aria-current="${isActive ? 'true' : 'false'}">
+        <div class="hud-avatar-box">${avatarMarkup(p)}</div>
         <div class="hud-info">
-          <span class="hud-name" style="color:${p.color}">${escapeHtml(p.name)}</span>
-          <span class="hud-money-badge">💵 ₺${p.money.toLocaleString()}</span>
+          <span class="hud-name">${escapeHtml(p.name)}</span>
+          <span class="hud-money-badge">₺${Number(p.money || 0).toLocaleString('tr-TR')}</span>
+          <span class="hud-sub">🏙️ ${p.ownedProps.length} şehir · 🏟️ ${stadiumCount}</span>
         </div>
+        ${isActive ? '<span class="hud-turn-badge">SIRA</span>' : ''}
       </div>
     `;
-  });
-
-  container.innerHTML = html;
+  }).join('');
+  updateTurnHud();
 }
 
 // Sıra bitirme
@@ -73,9 +86,10 @@ export function endTurn() {
     rollBtn.style.display = '';
   }
 
-  document.getElementById('btn-end').style.display = 'none';
-  document.getElementById('turn-badge').textContent = `TUR ${turnCount}`;
-  document.getElementById('phase-label').textContent = `${PLAYERS[currentPlayer].name}'nin sırası`;
+  const endBtn = document.getElementById('btn-end');
+  if (endBtn) endBtn.style.display = 'none';
+  const diceResult = document.getElementById('dice-result');
+  if (diceResult) diceResult.textContent = '';
 
   setTutorialText(`Sıradaki Oyuncu: ${PLAYERS[currentPlayer].name}. Zarları atmak için ZAR AT butonuna basınız.`);
   updateTutorialHUD();
@@ -86,7 +100,8 @@ export function endTurn() {
   syncMultiplayerState('end_turn');
 }
 
-export function finishGame(reason = 'completed') {
+// syncRemote=false: rakip oyunu bitirdiğinde (SSE 'finished') sonucu tekrar sunucuya göndermeyiz.
+export function finishGame(reason = 'completed', { syncRemote = true } = {}) {
   if (gameEnded) return false;
   setGameEnded(true);
 
@@ -101,8 +116,17 @@ export function finishGame(reason = 'completed') {
 
   setTutorialText(`${winner?.name || 'Bir oyuncu'} oyunu kazandı! Sonuçlar kaydediliyor.`);
   updateTutorialHUD();
-  gameService.player.recordGameEnd(PLAYERS, turnCount, reason);
-  finishMultiplayerSession(reason);
+  try {
+    gameService.player.recordGameEnd(PLAYERS, turnCount, reason);
+  } catch (e) {
+    console.warn('[Game] oyun sonu istatistikleri kaydedilemedi', e);
+  }
+  if (syncRemote) finishMultiplayerSession(reason);
+  trackEvent('game_finished', { mode: multiplayerService.sessionId ? 'online' : 'local', reason, turns: turnCount });
+  if (timerId) {
+    clearInterval(timerId);
+    setTimerId(null);
+  }
   renderPlayers();
   renderPanel();
   return true;
@@ -136,7 +160,7 @@ async function finishMultiplayerSession(reason) {
     ]);
     if (!multiplayerService.sessionId) return;
     const state = getGameSnapshot();
-    await gameService.saveGameResult(state.players);
+    // Maç sonucu recordGameEnd içinde kaydedilir; burada sadece oturum kapatılır.
     await import('../../services/ApiService.js').then(({ default: apiService }) =>
       apiService.finishMultiplayerSession(multiplayerService.sessionId, state, { reason, players: state.players })
     );

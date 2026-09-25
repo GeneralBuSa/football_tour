@@ -128,9 +128,12 @@ class StorageService {
 // PLAYER SERVICE — Oyuncu İstatistik Servisi
 // ==========================================
 class PlayerService {
-  constructor(eventBus, storageService) {
+  constructor(eventBus, storageService, achievementService = null) {
     this._eventBus = eventBus;
     this._storage = storageService;
+    // Önceden this.achievement hiç atanmıyordu; kazanan oyuncuda recordGameEnd
+    // TypeError fırlatıp oyun sonu kaydını ve çevrimiçi maç bitişini engelliyordu.
+    this.achievement = achievementService;
     this._statsKey = 'player_stats';
     this._stats = {};
     this._loaded = false;
@@ -199,8 +202,8 @@ class PlayerService {
     if (apiService.isLoggedIn()) {
       const currentUser = apiService.getUser();
       apiService.saveGameResult(players.map(p => ({ ...p, resultReason: reason }))).catch(console.error);
-      
-      const userPlayer = players.find(p => p.name === currentUser.username) || players[0];
+
+      const userPlayer = players.find(p => p.name === currentUser?.username) || players[0];
       if (userPlayer) {
         const userStats = this.getStats(userPlayer.name);
         const isUserWinner = winner && winner.name === userPlayer.name;
@@ -209,7 +212,7 @@ class PlayerService {
 
         // Yerelde de güncelle
         this.updateStats(userPlayer.name, { xp: newXp });
-        if (isUserWinner) {
+        if (isUserWinner && this.achievement) {
           this.achievement.unlock('FIRST_WIN').catch(console.error);
         }
         this._saveStats();
@@ -423,9 +426,9 @@ class GameService {
   constructor() {
     this.eventBus = new EventBus();
     this.storage = new StorageService(this.eventBus);
-    this.player = new PlayerService(this.eventBus, this.storage);
-    this.leaderboard = new LeaderboardService(this.eventBus, this.storage);
     this.achievement = new AchievementService(this.eventBus, this.storage);
+    this.player = new PlayerService(this.eventBus, this.storage, this.achievement);
+    this.leaderboard = new LeaderboardService(this.eventBus, this.storage);
     this._initialized = false;
   }
 
@@ -511,4 +514,5 @@ class GameService {
 
 // Singleton olarak dışarıya ver
 const gameService = new GameService();
+export { EventBus, StorageService, PlayerService, AchievementService, LeaderboardService, GameService };
 export default gameService;

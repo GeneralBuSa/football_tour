@@ -7,17 +7,27 @@
     "scripts": {
         "start": "node index.js",
         "dev": "node --watch index.js",
-        "check": "node --check index.js",
-        "test": "node --test"
+        "dev:memory": "node scripts/dev-memory.mjs",
+        "check": "node --check index.js && node --check app.js",
+        "test": "node --test \"test/**/*.test.js\"",
+        "test:unit": "node --test test/security.test.js test/matchmaking.sql.test.js",
+        "test:smoke": "node --test test/smoke.e2e.test.js",
+        "smoke": "node scripts/smoke.mjs",
+        "promo": "node scripts/promo.mjs"
+    },
+    "engines": {
+        "node": ">=20.9"
     },
     "dependencies": {
         "@supabase/supabase-js": "^2.43.4",
         "bcryptjs": "^2.4.3",
-        "body-parser": "1.20.6",
         "cors": "^2.8.5",
         "dotenv": "^16.4.5",
         "express": "^4.19.2",
         "jsonwebtoken": "^9.0.2",
         "stripe": "^22.5.0"
+    },
+    "devDependencies": {
+        "@electric-sql/pglite": "^0.5.8"
     }
 }

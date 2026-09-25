@@ -6,10 +6,12 @@ import apiService from '../../../services/ApiService.js';
 import tr from '../../locales/tr.json';
 import en from '../../locales/en.json';
 
-export default function useSession({ loadStats = true } = {}) {
+// loadGame=false: oyun motoru/Three.js yüklenmez (kurallar, gizlilik gibi içerik sayfaları).
+export default function useSession({ loadStats = true, loadGame = true } = {}) {
   const [isLoggedIn, setIsLoggedIn] = useState(false);
   const [user, setUser] = useState(null);
-  const [stats, setStats] = useState({ total_earnings: 0, wins: 0 });
+  // Bakiye yüklenene kadar boş kalır; üst menü sahte bir "₺0" göstermez.
+  const [stats, setStats] = useState({});
   const [language, setLanguage] = useState('Türkçe');
   const [mounted, setMounted] = useState(false);
   const [gameReady, setGameReady] = useState(false);
@@ -30,16 +32,25 @@ export default function useSession({ loadStats = true } = {}) {
     }
     setMounted(true);
 
-    // 2. game.js dinamik modülünü arka planda yükle
-    import('../../../js/game.js').then(async () => {
-      setGameReady(true);
-
+    const loadStatsNow = () => {
       if (logged && loadStats) {
         const u = apiService.getUser();
         apiService.getStats(u.id).then(res => {
           if (res && !res.error) setStats(res);
         }).catch(console.error);
       }
+    };
+
+    if (!loadGame) {
+      setGameReady(true);
+      loadStatsNow();
+      return;
+    }
+
+    // 2. game.js dinamik modülünü arka planda yükle
+    import('../../../js/game.js').then(async () => {
+      setGameReady(true);
+      loadStatsNow();
     }).catch(console.error);
   }, []);
 
